@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+    <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#56ccf2"/>
+            <stop offset="1" stop-color="#2f80ed"/>
+        </linearGradient>
+    </defs>
+    <!-- Orbit -->
+    <ellipse cx="32" cy="32" rx="30" ry="12" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2" transform="rotate(-25 32 32)"/>
+    <!-- Satellite body -->
+    <rect x="22" y="26" width="20" height="12" rx="2" fill="url(#g)"/>
+    <!-- Solar panels -->
+    <rect x="8" y="29" width="12" height="6" rx="1" fill="#7ed321"/>
+    <rect x="44" y="29" width="12" height="6" rx="1" fill="#7ed321"/>
+    <!-- Panel lines -->
+    <line x1="10" y1="32" x2="18" y2="32" stroke="#5a9c1a" stroke-width="1"/>
+    <line x1="46" y1="32" x2="54" y2="32" stroke="#5a9c1a" stroke-width="1"/>
+    <!-- Antenna -->
+    <line x1="32" y1="26" x2="32" y2="14" stroke="#ffffff" stroke-width="2"/>
+    <circle cx="32" cy="12" r="2.5" fill="#ffd166"/>
+    <!-- Dish -->
+    <circle cx="38" cy="20" r="4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+    <line x1="38" y1="20" x2="41" y2="17" stroke="#ffffff" stroke-width="1"/>
+    <!-- Lens -->
+    <circle cx="32" cy="33" r="3" fill="#001b33"/>
+    <circle cx="32" cy="33" r="1.2" fill="#56ccf2"/>
+    <!-- Ground dots -->
+    <circle cx="14" cy="52" r="2" fill="#ffffff" opacity="0.6"/>
+    <circle cx="22" cy="55" r="2" fill="#ffffff" opacity="0.4"/>
+    <circle cx="44" cy="52" r="2" fill="#ffffff" opacity="0.6"/>
+    <circle cx="52" cy="56" r="2" fill="#ffffff" opacity="0.4"/>
+</svg>

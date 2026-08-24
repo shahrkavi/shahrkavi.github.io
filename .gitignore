@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.pyc
+
+# Python virtual env
+.env/
+fastapi/.env/
+venv/
+.venv/
+!.env.example
+fastapi/.env.example
+
+# Node
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+fastapi/server.log
+fastapi/server.err.log
+
+# Cache files
+fastapi/cache/
+
+# Downloaded/processed files (generated at runtime)
+fastapi/downloads/
+
+# Test/Debug files
+*.txt
+!README.md
+!requirements.txt
+test_*.py
+*_err.txt
+*_job.txt
+*_search.txt
+*_debug.txt
+*_demo.txt
+*_detail.txt
+*_new*.txt
+*_final.txt
+*_check.txt
+*_msg.txt
+*_links*.txt
+_osm_debug.html
+processing.html
+crop_err.txt
+crop_err2.txt
+
+# Hidden dev directories
+.claude/
+.serena/
+.mimocode/
+
+# Empty env files
+.env
+.env.*
