@@ -22,6 +22,7 @@ import pandas as pd
 import requests
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 from shapely.geometry import shape
 
 router = APIRouter()
@@ -698,4 +699,75 @@ def osm_export(
         content=content,
         media_type=media,
         headers={"Content-Disposition": f'attachment; filename="osm_{filename}.{ext}"'},
+    )
+
+
+# === Elevation points export (client-generated GeoJSON -> vector formats) ===
+
+
+class PointsExportRequest(BaseModel):
+    geojson: dict
+    format: str = "shp"
+
+
+def _plain_features_to_gdf(features: List[dict]) -> gpd.GeoDataFrame:
+    """Convert generic GeoJSON point features to a GeoDataFrame (EPSG:4326).
+
+    Every property becomes a column; features without usable geometry are
+    dropped.
+    """
+    rows = []
+    geoms = []
+    for f in features:
+        props = f.get("properties", {}) or {}
+        rows.append(dict(props))
+        geoms.append(_geom_to_shapely(f.get("geometry")))
+    gdf = gpd.GeoDataFrame(rows, geometry=geoms, crs="EPSG:4326")
+    return gdf[gdf.geometry.notna()]
+
+
+@router.post("/export-points")
+def export_points(req: PointsExportRequest):
+    """Convert a client-generated GeoJSON FeatureCollection (e.g. elevation
+    sample points) into shp / geojson / kml / gpkg / csv for download."""
+    fmt = (req.format or "").strip().lower()
+    if fmt not in EXPORT_FORMATS:
+        raise HTTPException(status_code=400, detail="فرمت خروجی نامعتبر است")
+
+    gj = req.geojson
+    if not isinstance(gj, dict) or gj.get("type") != "FeatureCollection":
+        raise HTTPException(status_code=400, detail="ورودی باید یک GeoJSON FeatureCollection باشد")
+    features = [f for f in (gj.get("features") or []) if isinstance(f, dict)]
+    if not features:
+        raise HTTPException(status_code=400, detail="هیچ نقطه‌ای برای تبدیل وجود ندارد")
+
+    gdf = _plain_features_to_gdf(features)
+    if gdf.empty:
+        raise HTTPException(status_code=400, detail="هندسه معتبری در ورودی یافت نشد")
+    # Shapefile column names are limited to 10 characters
+    if fmt == "shp":
+        gdf.columns = [c[:10] for c in gdf.columns]
+
+    if fmt == "shp":
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            with tempfile.TemporaryDirectory() as tmp:
+                base = os.path.join(tmp, "elevation_points")
+                gdf.to_file(base + ".shp", driver="ESRI Shapefile")
+                for fn in sorted(os.listdir(tmp)):
+                    zf.write(os.path.join(tmp, fn), fn)
+        content = buf.getvalue()
+    elif fmt == "csv":
+        content = _export_csv(gdf)
+    else:
+        content = _export_single_file(gdf, fmt)
+
+    _, media, ext = EXPORT_FORMATS[fmt]
+    return Response(
+        content=content,
+        media_type=media,
+        headers={
+            "Content-Disposition": 'attachment; filename="elevation_points.' + ext + '"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
     )

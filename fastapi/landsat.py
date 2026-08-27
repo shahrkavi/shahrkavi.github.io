@@ -24,8 +24,11 @@ import time
 import traceback
 import queue
 import uuid
-from datetime import datetime
+import math
+import random
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import numpy as np
 import rasterio
 from rasterio.merge import merge as merge_rasters
@@ -639,6 +642,10 @@ def stac_item_to_scene(item: dict, dataset_code: str) -> dict:
 
     thumbnail_url = get_preview_url(item) or ""
 
+    # TileJSON URL for true-geometry map preview (falls back to thumbnail client-side)
+    tilejson_asset = item.get("assets", {}).get("tilejson") or {}
+    tilejson_url = (tilejson_asset.get("href") or "").replace("{tile_matrix_sets_id}", "WebMercatorQuad")
+
     path, row = extract_tile(family, props, item_id)
 
     # Size estimate (from advertised file sizes; fallback for no metadata)
@@ -667,6 +674,7 @@ def stac_item_to_scene(item: dict, dataset_code: str) -> dict:
         "lng": round(lng, 4),
         "footprint": footprint,
         "thumbnail": thumbnail_url,
+        "tilejson": tilejson_url,
         "path": path,
         "row": row,
         "size": size_str,
@@ -1005,6 +1013,94 @@ async def search_landsat(
     return JSONResponse(content=result)
 
 
+TEHRAN_TZ = ZoneInfo("Asia/Tehran")
+
+
+@router.get("/available-dates")
+async def get_available_dates(
+    north: float = Query(..., description="North latitude"),
+    south: float = Query(..., description="South latitude"),
+    east: float = Query(..., description="East longitude"),
+    west: float = Query(..., description="West longitude"),
+    datasets: str = Query("L8", description="Dataset code(s), e.g. L8, L9, S2"),
+    start: str = Query(..., description="Window start date (YYYY-MM-DD)"),
+    end: str = Query(..., description="Window end date (YYYY-MM-DD)"),
+    limit: int = Query(1000, ge=1, le=5000, description="Max STAC items per dataset"),
+):
+    """
+    Distinct acquisition dates that have imagery for the region + dataset
+    inside the given date window. The window is the calendar's visible month
+    span, so queries stay small; acquisition datetimes are converted to
+    Asia/Tehran local time before extracting the date part.
+    """
+    if north <= south:
+        raise HTTPException(status_code=400, detail="عرض شمالی باید بزرگتر از جنوب باشد")
+    if east <= west:
+        raise HTTPException(status_code=400, detail="طول شرقی باید بزرگتر از طول غربی باشد")
+
+    try:
+        start_dt = datetime.strptime(start, "%Y-%m-%d")
+        end_dt = datetime.strptime(end, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="قالب تاریخ نامعتبر است (YYYY-MM-DD)")
+    if start_dt > end_dt:
+        raise HTTPException(status_code=400, detail="تاریخ شروع باید قبل از تاریخ پایان باشد")
+
+    codes = []
+    for code in (datasets or "").split(","):
+        c = code.strip().upper()
+        if c in DATASET_CONFIGS:
+            codes.append(c)
+    if not codes:
+        raise HTTPException(status_code=400, detail="دیتاست معتبری انتخاب نشده است")
+
+    bbox = [west, south, east, north]
+    cache_params = {"source": "available-dates", "bbox": bbox, "codes": codes,
+                    "start": start, "end": end, "limit": limit}
+    cache_key = get_cache_key(cache_params)
+    cached = get_cached_response(cache_key)
+    if cached:
+        return JSONResponse(content=cached)
+
+    datetime_range = f"{start}T00:00:00Z/{end}T23:59:59Z"
+    all_dates = set()
+    try:
+        for code in codes:
+            cfg = DATASET_CONFIGS[code]
+            search_body = build_stac_search_body(
+                cfg["collection"], bbox, datetime_range,
+                cloud_max=100, platforms=cfg["platforms"],
+                family=cfg["family"], limit=limit,
+            )
+            items, _truncated = fetch_all_stac_items(search_body, limit)
+            for item in items:
+                props = item.get("properties", {})
+                raw = props.get("datetime") or props.get("start_datetime") or ""
+                if not raw:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    all_dates.add(dt.astimezone(TEHRAN_TZ).date().isoformat())
+                except ValueError:
+                    continue
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="درخواست به سرور Planetary Computer با مشکل مواجه شد")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"خطا در ارتباط با Planetary Computer: {str(e)}")
+
+    result = {
+        "success": True,
+        "dates": sorted(all_dates),
+        "total": len(all_dates),
+        "window": {"start": start, "end": end},
+    }
+
+    set_cached_response(cache_key, result)
+    return JSONResponse(content=result)
+
+
 @router.get("/dem")
 async def search_dem(
     north: float = Query(..., description="North latitude"),
@@ -1078,6 +1174,15 @@ async def search_dem(
 
         tile_id = item.get("id", "")
         bbox_item = item.get("bbox", [0, 0, 0, 0])
+
+        # Hillshade TileJSON for true-geometry map preview. hillshade needs a
+        # rescale window or titiler renders an empty tile.
+        tilejson_url = (
+            "https://planetarycomputer.microsoft.com/api/data/v1/item/tilejson.json"
+            f"?collection=cop-dem-glo-30&item={tile_id}"
+            "&assets=data&hillshade=True&rescale=-1000%2C4000"
+        )
+
         tiles.append({
             "id": tile_id,
             "name": tile_id,
@@ -1085,6 +1190,7 @@ async def search_dem(
             "coverage": round(coverage, 1),
             "download_url": href,
             "filename": f"{tile_id}.tif",
+            "tilejson": tilejson_url,
         })
 
     result = {
@@ -1347,11 +1453,35 @@ class ProcessRequest(BaseModel):
     process_type: str  # crop, ndvi, ndwi, evi, truecolor, falsecolor, custom_band
     bounds: Optional[Dict[str, float]] = None  # north, south, east, west
     bands: List[str] = []
+    point_count: int = 100        # height_points: number of sample points
+    sampling_method: str = "random"  # height_points: random | grid
+    output_format: str = "geojson"   # height_points: geojson | shp | gpkg | csv
 
     @field_validator('scene_id')
     @classmethod
     def validate_scene_id(cls, v):
         return v.strip() if v else v
+
+    @field_validator('point_count')
+    @classmethod
+    def validate_point_count(cls, v):
+        if not (1 <= v <= 5000):
+            raise ValueError('point_count must be between 1 and 5000')
+        return v
+
+    @field_validator('sampling_method')
+    @classmethod
+    def validate_sampling_method(cls, v):
+        if v not in ('random', 'grid'):
+            raise ValueError('sampling_method must be random or grid')
+        return v
+
+    @field_validator('output_format')
+    @classmethod
+    def validate_output_format(cls, v):
+        if v not in ('geojson', 'shp', 'gpkg', 'csv'):
+            raise ValueError('output_format must be geojson, shp, gpkg or csv')
+        return v
 
     def model_post_init(self, __context):
         if not self.scene_ids and self.scene_id:
@@ -1363,7 +1493,7 @@ class ProcessRequest(BaseModel):
     @field_validator('process_type')
     @classmethod
     def validate_process_type(cls, v):
-        valid_types = ['crop', 'ndvi', 'ndwi', 'evi', 'truecolor', 'falsecolor', 'custom_band', 'hillshade', 'elevation']
+        valid_types = ['crop', 'ndvi', 'ndwi', 'evi', 'truecolor', 'falsecolor', 'custom_band', 'hillshade', 'elevation', 'height_points']
         if v not in valid_types:
             raise ValueError(f'Invalid process type. Must be one of: {valid_types}')
         return v
@@ -1379,7 +1509,121 @@ DEFAULT_PROCESS_BANDS = {
     'crop': ['red', 'green', 'blue', 'nir', 'swir16', 'swir22'],
     'hillshade': ['dem'],
     'elevation': ['dem'],
+    'height_points': ['dem'],
 }
+
+
+def _generate_sample_points(bounds: Dict[str, float], count: int, method: str) -> List[tuple]:
+    """Generate `count` (lat, lng) sample points inside the bbox.
+
+    grid: evenly spaced cell centres, aspect-aware columns.
+    random: uniform distribution.
+    """
+    south, north = bounds["south"], bounds["north"]
+    west, east = bounds["west"], bounds["east"]
+    points: List[tuple] = []
+
+    if method == "grid":
+        width, height = east - west, north - south
+        aspect = (width / height) if height > 0 else 1.0
+        cols = max(1, round(math.sqrt(count * aspect)))
+        rows = max(1, math.ceil(count / cols))
+        for r in range(rows):
+            for c in range(cols):
+                if len(points) >= count:
+                    break
+                lat = south + height * (0.5 if rows == 1 else (r + 0.5) / rows)
+                lng = west + width * (0.5 if cols == 1 else (c + 0.5) / cols)
+                points.append((lat, lng))
+    else:
+        for _ in range(count):
+            points.append((random.uniform(south, north), random.uniform(west, east)))
+    return points
+
+
+async def sample_dem_height_points(
+    dem_path: Path,
+    bounds: Dict[str, float],
+    point_count: int,
+    sampling_method: str,
+    scene_id: str,
+    output_dir: Path,
+    output_format: str = "geojson",
+) -> Path:
+    """Sample elevations from the (mosaicked) DEM raster at generated points.
+
+    Writes the result as geojson, shp (zipped), gpkg or csv and returns the
+    file path."""
+    if not bounds or not all(k in bounds for k in ("north", "south", "east", "west")):
+        raise ValueError("برای نقاط ارتفاعی، محدوده جغرافیایی تب «منطقه» الزامی است")
+    b = {k: float(bounds[k]) for k in ("north", "south", "east", "west")}
+    if b["north"] <= b["south"] or b["east"] <= b["west"]:
+        raise ValueError("محدوده جغرافیایی نامعتبر است")
+
+    points = _generate_sample_points(b, point_count, sampling_method)
+    coords = [(lng, lat) for lat, lng in points]
+
+    features = []
+    with rasterio.open(dem_path) as src:
+        samples = list(src.sample(coords, masked=True))
+        for (lat, lng), val in zip(points, samples):
+            elevation = None
+            if val is not np.ma.masked and not np.ma.is_masked(val):
+                try:
+                    elevation = round(float(val), 2)
+                except (TypeError, ValueError):
+                    elevation = None
+            features.append({
+                "type": "Feature",
+                "properties": {"id": len(features) + 1, "elevation": elevation},
+                "geometry": {"type": "Point", "coordinates": [round(lng, 6), round(lat, 6)]},
+            })
+
+    if output_format == "geojson":
+        fc = {
+            "type": "FeatureCollection",
+            "name": "elevation_points",
+            "source_dem": scene_id,
+            "samplingMethod": sampling_method,
+            "bboxRegion": [b["west"], b["south"], b["east"], b["north"]],
+            "features": features,
+        }
+        out_path = Path(output_dir) / f"{scene_id}_height_points.geojson"
+        out_path.write_text(json.dumps(fc, ensure_ascii=False), encoding="utf-8")
+        return out_path
+
+    # Vector formats via geopandas
+    import geopandas as gpd
+
+    gdf = gpd.GeoDataFrame(
+        [{"id": f["properties"]["id"],
+          "elevation": f["properties"]["elevation"]} for f in features],
+        geometry=[shape(f["geometry"]) for f in features],
+        crs="EPSG:4326",
+    )
+
+    if output_format == "csv":
+        out_path = Path(output_dir) / f"{scene_id}_height_points.csv"
+        # GeoDataFrame.to_csv serialises geometry as WKT text
+        out_path.write_text(gdf.to_csv(index=False), encoding="utf-8")
+        return out_path
+
+    if output_format == "gpkg":
+        out_path = Path(output_dir) / f"{scene_id}_height_points.gpkg"
+        gdf.to_file(out_path, driver="GPKG")
+        return out_path
+
+    # shp -> zipped shapefile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = os.path.join(tmp, "elevation_points")
+            gdf.to_file(base + ".shp", driver="ESRI Shapefile")
+            for fn in sorted(os.listdir(tmp)):
+                zf.write(os.path.join(tmp, fn), fn)
+    out_path = Path(output_dir) / f"{scene_id}_height_points.zip"
+    out_path.write_bytes(buf.getvalue())
+    return out_path
 
 
 # === Process Endpoint (queue-based) ===
@@ -1561,33 +1805,55 @@ def _run_job(job_id: str, request: ProcessRequest) -> None:
 
             _update_job(job_id, progress=60, message=f"در حال پردازش ({request.process_type})...")
 
-            # Process based on type. process_bands/generate_preview are async
-            # in signature but synchronous in body; run them via asyncio.run.
-            output_path = asyncio.run(process_bands(
-                band_paths=band_paths,
-                process_type=request.process_type,
-                bounds=request.bounds,
-                scene_id=scene_id,
-                output_dir=tmpdir_path,
-                calibration=band_calibration,
-            ))
+            # Height points: sample the DEM raster directly instead of
+            # producing an image; output is a GeoJSON FeatureCollection.
+            if request.process_type == 'height_points':
+                if not request.bounds:
+                    raise ValueError("برای نقاط ارتفاعی، محدوده جغرافیایی تب «منطقه» الزامی است")
+                output_path = asyncio.run(sample_dem_height_points(
+                    dem_path=band_paths['dem'],
+                    bounds=request.bounds,
+                    point_count=request.point_count,
+                    sampling_method=request.sampling_method,
+                    scene_id=scene_id,
+                    output_dir=tmpdir_path,
+                    output_format=request.output_format,
+                ))
+            else:
+                # Process based on type. process_bands/generate_preview are async
+                # in signature but synchronous in body; run them via asyncio.run.
+                output_path = asyncio.run(process_bands(
+                    band_paths=band_paths,
+                    process_type=request.process_type,
+                    bounds=request.bounds,
+                    scene_id=scene_id,
+                    output_dir=tmpdir_path,
+                    calibration=band_calibration,
+                ))
 
             # Move final result to downloads dir
             final_dir = DOWNLOADS_DIR
             final_dir.mkdir(parents=True, exist_ok=True)
-            final_filename = f"{scene_id}_{request.process_type}.tif"
+            is_points_output = request.process_type == 'height_points'
+            if is_points_output:
+                extension = {'geojson': 'geojson', 'shp': 'zip',
+                             'gpkg': 'gpkg', 'csv': 'csv'}.get(request.output_format, 'geojson')
+            else:
+                extension = 'tif'
+            final_filename = f"{scene_id}_{request.process_type}.{extension}"
             final_path = final_dir / final_filename
             shutil.copy2(output_path, final_path)
 
-            _update_job(job_id, progress=90, message="در حال ساخت پیش‌نمایش...")
-
             preview_url = None
-            try:
-                preview_url = asyncio.run(generate_preview(
-                    output_path, final_dir, scene_id, request.process_type
-                ))
-            except Exception:
-                pass
+            if not is_points_output:
+                _update_job(job_id, progress=90, message="در حال ساخت پیش‌نمایش...")
+
+                try:
+                    preview_url = asyncio.run(generate_preview(
+                        output_path, final_dir, scene_id, request.process_type
+                    ))
+                except Exception:
+                    pass
 
         _update_job(
             job_id,
