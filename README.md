@@ -11,6 +11,9 @@ The application serves both the frontend and API from the same origin. Run
 the API with one worker because processing jobs and their queues are currently
 held in process memory.
 
+Bing basemaps require a browser-side key. Set `window.BING_MAPS_KEY` in
+`js/config.js` and restrict that key to the production domain.
+
 ## استقرار: GitHub Pages + Render
 
 ### ۱. آماده‌سازی مخزن GitHub

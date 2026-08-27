@@ -5,6 +5,18 @@ frontend files, so the browser uses the same origin for both the UI and API.
 Nginx provides the public HTTP/HTTPS endpoint and systemd keeps the service
 running.
 
+## Bing Maps key
+
+The frontend basemap selector uses Bing tile endpoints. Create a Bing Maps
+key, restrict it to the production hostname in the Bing Maps portal, then set
+it in `js/config.js`:
+
+```javascript
+window.BING_MAPS_KEY = 'YOUR_BING_MAPS_KEY';
+```
+
+The key is visible to browsers by design, so domain restrictions are required.
+
 ## 1. Install system packages
 
 Run on Ubuntu 22.04 or newer:

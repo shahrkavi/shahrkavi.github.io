@@ -20,4 +20,10 @@
     if (params.get('api')) {
         window.API_BASE = params.get('api');
     }
+
+    // Bing basemap tiles require a Bing Maps key. Configure it for production.
+    window.BING_MAPS_KEY = window.BING_MAPS_KEY || '';
+    if (params.get('bingKey')) {
+        window.BING_MAPS_KEY = params.get('bingKey');
+    }
 })();

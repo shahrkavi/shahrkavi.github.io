@@ -10,36 +10,73 @@ const MapModule = (() => {
     let drawControl = null;
     let selectionRect = null; // Highlight rectangle for the selected region
 
+    function bingQuadKey(coords) {
+        let quadKey = '';
+        for (let i = coords.z; i > 0; i -= 1) {
+            let digit = 0;
+            const mask = 1 << (i - 1);
+            if ((coords.x & mask) !== 0) digit += 1;
+            if ((coords.y & mask) !== 0) digit += 2;
+            quadKey += digit;
+        }
+        return quadKey;
+    }
+
+    function bingLayer(style, attribution) {
+        const extension = style === 'r' ? 'png' : 'jpeg';
+        const layer = L.tileLayer('', {
+            minZoom: 1,
+            maxZoom: 19,
+            subdomains: ['0', '1', '2', '3'],
+            attribution,
+            errorTileUrl: '',
+        });
+
+        layer.getTileUrl = function(coords) {
+            const max = Math.pow(2, coords.z);
+            const x = ((coords.x % max) + max) % max;
+            const y = coords.y;
+            if (y < 0 || y >= max) return '';
+            const quadkey = bingQuadKey({ x, y, z: coords.z });
+            const subdomain = this.options.subdomains[(x + y) % this.options.subdomains.length];
+            const key = encodeURIComponent(window.BING_MAPS_KEY || '');
+            return `https://ecn.t${subdomain}.tiles.virtualearth.net/tiles/${style}${quadkey}.${extension}?g=1&key=${key}`;
+        };
+
+        if (!window.BING_MAPS_KEY) {
+            console.warn('Bing basemaps need window.BING_MAPS_KEY in js/config.js');
+        }
+        return layer;
+    }
+
+    const BING_ATTRIBUTION = '&copy; Microsoft Bing Maps';
+
     // Basemap definitions
     const BASEMAPS = {
         satellite: {
             name: 'ماهواره‌ای',
-            layer: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.{ext}', {
-                minZoom: 0,
-                maxZoom: 20,
-                attribution: '&copy; CNES, Distribution Airbus DS, © Airbus DS, © PlanetObserver (Contains Copernicus Data) | &copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                ext: 'jpg'
-            }),
+            layer: bingLayer('a', BING_ATTRIBUTION),
         },
         osm: {
             name: 'OpenStreetMap',
             layer: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
                 maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             }),
         },
-        streets: {
+        terrain: {
             name: 'زمین',
             layer: L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.{ext}', {
                 minZoom: 0,
                 maxZoom: 18,
-                attribution: '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://www.stamen.com/" target="_blank">Stamen Design</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                ext: 'png'
+                ext: 'png',
+                detectRetina: true,
+                attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://stamen.com/">Stamen Design</a> | &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             }),
         },
     };
 
-    let currentBasemap = 'streets';
+    let currentBasemap = 'osm';
     let activeBasemapLayer;
 
     // Additional layers storage
