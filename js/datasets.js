@@ -17,14 +17,24 @@ const DatasetsModule = (() => {
         { id: 'MYD', name: 'MODIS Aqua Surface Reflectance', info: '2002-اکنون | 500 متر | 8 روزه', category: 'MODIS' },
         { id: 'DEM', name: 'Copernicus DEM GLO-30', info: 'دادههای ارتفاعی | 30 متر | کل جهان', category: 'DEMs' },
         { id: 'OSM', name: 'OpenStreetMap', info: 'دادههای برداری | منطقه انتخابی', category: 'OSM' },
+        { id: 'OVT', name: 'ساختمانهای Overture Maps', info: 'فوتپرینت ساختمانها | ارتفاع | کل جهان | جستجوی اول چند دقیقه', category: 'OSM' },
         { id: 'WTH', name: 'ایستگاههای هواشناسی', info: 'داده‌های روزانه | ایستگاه‌های منطقه انتخابی', category: 'هواشناسی' },
     ];
 
     // Families that expose cloud-cover metadata (per-planetary-computer)
     const CLOUD_CAPABLE = new Set(['L4', 'L5', 'L7', 'L8', 'L9', 'S2']);
 
-    // Datasets that skip the query step and go directly to results
-    const SKIPS_QUERY = new Set(['DEM']);
+    // Datasets that skip the query step and use a specialized flow
+    const SKIPS_QUERY = new Set(['DEM', 'OVT']);
+
+    const CATEGORY_META = {
+        Landsat: { label: 'لندست', icon: 'bi-globe-americas' },
+        Sentinel: { label: 'سنتینل', icon: 'bi-satellite' },
+        MODIS: { label: 'مودیس', icon: 'bi-circle-half' },
+        DEMs: { label: 'مدل‌های ارتفاعی', icon: 'bi-layers' },
+        OSM: { label: 'داده‌های برداری', icon: 'bi-signpost-2' },
+        هواشناسی: { label: 'هواشناسی', icon: 'bi-cloud-sun' },
+    };
 
     // Bands available per satellite
     const BANDS_BY_SATELLITE = {
@@ -39,6 +49,7 @@ const DatasetsModule = (() => {
         'MYD': ['red', 'green', 'blue', 'nir', 'swir16', 'swir22'],
         'DEM': ['dem'],
         'OSM': [],
+        'OVT': [],
         'WTH': [],
     };
 
@@ -74,7 +85,9 @@ const DatasetsModule = (() => {
 
         return Object.keys(categories).map(catName => ({
             id: 'cat-' + catName,
-            name: catName,
+            name: (CATEGORY_META[catName] || {}).label || catName,
+            categoryName: catName,
+            categoryIcon: (CATEGORY_META[catName] || {}).icon || 'bi-folder2-open',
             selectable: false,
             children: categories[catName].map(ds => ({
                 id: ds.id,
@@ -105,13 +118,21 @@ const DatasetsModule = (() => {
                     if (node.id && !node.id.startsWith('cat-')) {
                         selectDataset(node.id);
                     }
+                } else {
+                    clearDatasetSelection();
                 }
             },
             onRenderNode: (nodeData, nodeContentWrapperElement) => {
                 nodeContentWrapperElement.innerHTML = '';
 
+                if (!nodeData.selectable) {
+                    const icon = document.createElement('i');
+                    icon.className = `bi ${nodeData.categoryIcon || 'bi-folder2-open'} dataset-category-icon`;
+                    nodeContentWrapperElement.appendChild(icon);
+                }
+
                 const nameSpan = document.createElement('span');
-                nameSpan.className = 'treeview-node-text fw-medium';
+                nameSpan.className = `treeview-node-text ${nodeData.selectable ? 'fw-medium' : 'dataset-category-name'}`;
                 nameSpan.textContent = nodeData.name;
                 nodeContentWrapperElement.appendChild(nameSpan);
 
@@ -147,21 +168,61 @@ const DatasetsModule = (() => {
         // Update query parameter visibility
         updateQueryParamsForDataset(datasetId);
 
+        const selected = DATASETS.find(d => d.id === datasetId);
+
+        // Update the selected dataset card so the next action is obvious.
+        const card = document.getElementById('datasetSelectionCard');
+        if (card) {
+            const empty = card.querySelector('.dataset-selection-empty');
+            const filled = card.querySelector('.dataset-selection-filled');
+            if (empty) empty.classList.add('d-none');
+            if (filled) filled.classList.remove('d-none');
+            const name = document.getElementById('datasetSelectionName');
+            const info = document.getElementById('datasetSelectionInfo');
+            if (name) name.textContent = selected ? selected.name : datasetId;
+            if (info) info.textContent = selected ? selected.info : '';
+            const icon = document.getElementById('datasetSelectionIcon');
+            if (icon) icon.innerHTML = `<i class="bi ${datasetId === 'OVT' ? 'bi-buildings' : datasetId === 'DEM' ? 'bi-layers' : 'bi-database'}"></i>`;
+        }
+
         // Update the next button label for datasets that skip the query step
         const nextBtn = document.querySelector('.btn-next[data-next-step="3"]');
         if (nextBtn) {
-            if (SKIPS_QUERY.has(datasetId)) {
-                nextBtn.innerHTML = 'نتایج <i class="bi bi-chevron-left"></i>';
+            nextBtn.disabled = false;
+            if (datasetId === 'OVT') {
+                nextBtn.innerHTML = 'ادامه به پردازش <i class="bi bi-arrow-left"></i>';
+            } else if (datasetId === 'DEM') {
+                nextBtn.innerHTML = 'ادامه به نتایج <i class="bi bi-arrow-left"></i>';
+            } else if (SKIPS_QUERY.has(datasetId)) {
+                nextBtn.innerHTML = 'ادامه <i class="bi bi-chevron-left"></i>';
             } else {
-                nextBtn.innerHTML = 'بعدی <i class="bi bi-chevron-left"></i>';
+                nextBtn.innerHTML = 'ادامه به پارامترها <i class="bi bi-arrow-left"></i>';
             }
         }
 
         // Update summary
-        const ds = DATASETS.find(d => d.id === datasetId);
-        setSummaryDataset(datasetId, ds ? ds.name : datasetId);
+        setSummaryDataset(datasetId, selected ? selected.name : datasetId);
 
         EventBus.emit('dataset:changed', datasetId);
+    }
+
+    function clearDatasetSelection() {
+        AppState.searchCriteria.dataset = null;
+        updateQueryParamsForDataset(null);
+
+        const card = document.getElementById('datasetSelectionCard');
+        if (card) {
+            card.querySelector('.dataset-selection-empty')?.classList.remove('d-none');
+            card.querySelector('.dataset-selection-filled')?.classList.add('d-none');
+        }
+
+        const nextBtn = document.querySelector('.btn-next[data-next-step="3"]');
+        if (nextBtn) {
+            nextBtn.disabled = true;
+            nextBtn.innerHTML = 'انتخاب منبع <i class="bi bi-arrow-left"></i>';
+        }
+        setSummaryDataset(null);
+        EventBus.emit('dataset:changed', null);
     }
 
     /**
@@ -174,17 +235,26 @@ const DatasetsModule = (() => {
         const osmSection = document.getElementById('osmTagSection');
         if (!cloudSection) return;
 
+        if (!datasetId) {
+            cloudSection.style.display = 'none';
+            if (cloudNote) cloudNote.style.display = 'none';
+            if (dateSection) dateSection.style.display = 'none';
+            if (osmSection) osmSection.style.display = 'none';
+            return;
+        }
+
         const isOsm = datasetId === 'OSM';
         const isWeather = datasetId === 'WTH';
         const isDem = datasetId === 'DEM';
+        const isOvt = datasetId === 'OVT';
         const supportsCloud = CLOUD_CAPABLE.has(datasetId);
 
-        cloudSection.style.display = (isOsm || isWeather || isDem) ? 'none' : (supportsCloud ? 'block' : 'none');
+        cloudSection.style.display = (isOsm || isWeather || isDem || isOvt) ? 'none' : (supportsCloud ? 'block' : 'none');
         if (cloudNote) {
-            cloudNote.style.display = isOsm || isWeather || isDem ? 'none' : (supportsCloud ? 'none' : 'block');
+            cloudNote.style.display = (isOsm || isWeather || isDem || isOvt) ? 'none' : (supportsCloud ? 'none' : 'block');
         }
         if (dateSection) {
-            dateSection.style.display = (isOsm || isDem) ? 'none' : 'block';
+            dateSection.style.display = (isOsm || isDem || isOvt) ? 'none' : 'block';
         }
         if (osmSection) {
             osmSection.style.display = isOsm ? 'block' : 'none';

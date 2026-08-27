@@ -4,6 +4,13 @@
  */
 
 const SearchModule = (() => {
+    // Datasets whose imagery availability can be highlighted on the calendar
+    const AVAILABLE_DATASETS = new Set(['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'S1', 'MOD', 'MYD']);
+
+    let availReqSeq = 0;
+    let availDebounceTimer = null;
+    let lastVisibleWindow = null;
+
     function init() {
         const cloudSlider = document.getElementById('CloudCover');
         const cloudValue = document.getElementById('cloudCoverValue');
@@ -30,6 +37,13 @@ const SearchModule = (() => {
                 document.getElementById('South').value = bounds.south.toFixed(4);
                 document.getElementById('East').value = bounds.east.toFixed(4);
                 document.getElementById('West').value = bounds.west.toFixed(4);
+
+                // Highlight the selected region on the map
+                MapModule.showSelectionBounds(bounds.north, bounds.south, bounds.east, bounds.west);
+
+                // Coordinates changed -> refresh calendar availability dots
+                scheduleAvailableDatesRefresh();
+
                 showToast('محدوده نقشه به فرم جستجو منتقل شد', 'info');
             });
         }
@@ -46,21 +60,47 @@ const SearchModule = (() => {
 
         // Listen for map drawing events to auto-fill coordinates
         EventBus.on('map:drawing:created', (coords) => {
+            // A fresh hand-drawn shape replaces the "use map bounds" highlight
+            MapModule.clearSelectionBounds();
             if (coords && coords.type !== 'point') {
                 document.getElementById('North').value = coords.north.toFixed(4);
                 document.getElementById('South').value = coords.south.toFixed(4);
                 document.getElementById('East').value = coords.east.toFixed(4);
                 document.getElementById('West').value = coords.west.toFixed(4);
+
+                // Coordinates changed -> refresh calendar availability dots
+                scheduleAvailableDatesRefresh();
             }
         });
 
-        // Set default dates
+        // Available-dates highlighting: refetch whenever the calendar shows
+        // different months, the region changes, or the dataset changes
+        ['North', 'South', 'East', 'West'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', scheduleAvailableDatesRefresh);
+            }
+        });
+
+        EventBus.on('dataset:changed', () => {
+            JalaliDatePicker.setAvailableDates([]);
+            scheduleAvailableDatesRefresh();
+        });
+
+        JalaliDatePicker.onViewChange(win => {
+            lastVisibleWindow = win;
+            refreshAvailableDates();
+        });
+
+        // Set default range: last 6 months until today
         const today = new Date();
         const sixMonthsAgo = new Date(today);
         sixMonthsAgo.setMonth(today.getMonth() - 6);
 
-        document.getElementById('DateTo').value = today.toISOString().split('T')[0];
-        document.getElementById('DateFrom').value = sixMonthsAgo.toISOString().split('T')[0];
+        JalaliDatePicker.setRange(
+            sixMonthsAgo.toISOString().split('T')[0],
+            today.toISOString().split('T')[0]
+        );
 
         console.log('Search module initialized');
     }
@@ -75,13 +115,14 @@ const SearchModule = (() => {
         };
 
         // Gather criteria
+        const dateRange = JalaliDatePicker.getRange();
         const criteria = {
             north: parseCoordinate('North'),
             south: parseCoordinate('South'),
             east: parseCoordinate('East'),
             west: parseCoordinate('West'),
-            dateFrom: document.getElementById('DateFrom').value || null,
-            dateTo: document.getElementById('DateTo').value || null,
+            dateFrom: dateRange.start,
+            dateTo: dateRange.end,
             cloudMax: parseInt(document.getElementById('CloudCover').value),
             dataset: AppState.searchCriteria.dataset,
             bands: AppState.searchCriteria.bands || [],
@@ -90,6 +131,15 @@ const SearchModule = (() => {
         const isOsm = criteria.dataset === 'OSM';
         const isWeather = criteria.dataset === 'WTH';
         const isDem = criteria.dataset === 'DEM';
+        const isOvt = criteria.dataset === 'OVT';
+
+        // Buildings query uses only the region - no dates or cloud filter
+        if (isOvt) {
+            criteria.dateFrom = null;
+            criteria.dateTo = null;
+            criteria.cloudMax = null;
+        }
+
 
         // Validate coordinates
         if ([criteria.north, criteria.south, criteria.east, criteria.west].some(value => value === null)) {
@@ -171,25 +221,31 @@ const SearchModule = (() => {
         MapModule.fitBounds(criteria.north, criteria.south, criteria.east, criteria.west);
 
         // Call API
-        ApiService.search(criteria)
+        return ApiService.search(criteria)
             .then(response => {
                 setLoading(false);
 
                 if (response.success) {
                     AppState.searchResults = response.data;
                     AppState.osmInfo = response.osm || null;
+                    AppState.overtureInfo = response.overture || null;
                     AppState.weatherInfo = response.weather || null;
                     AppState.demInfo = response.dem || null;
 
                     // Build params summary
                     const params = [];
-                    if (criteria.dateFrom) params.push({ label: 'از تاریخ', value: criteria.dateFrom });
-                    if (criteria.dateTo) params.push({ label: 'تا تاریخ', value: criteria.dateTo });
+                    if (criteria.dataset === 'OVT') {
+                        params.push({ label: 'منبع', value: 'Overture Maps ساختمانها' });
+                    }
+                    if (criteria.dateFrom) params.push({ label: 'از تاریخ', value: isoToJalaliString(criteria.dateFrom) });
+                    if (criteria.dateTo && criteria.dateTo !== criteria.dateFrom) {
+                        params.push({ label: 'تا تاریخ', value: isoToJalaliString(criteria.dateTo) });
+                    }
                     if (!isOsm && !isDem && !isWeather && criteria.cloudMax != null) {
                         params.push({ label: 'حداکثر ابر', value: toPersianNum(criteria.cloudMax) + '٪' });
                     }
                     if (isOsm && criteria.tags) {
-                        params.push({ label: 'تگها', value: criteria.tags.map(([k,v]) => `${k}=${v}`).join(', ') });
+                        params.push({ label: 'تگها', value: criteria.tags.map(t => `${t.key}${t.value ? '=' + t.value : ''}${t.any ? ' (هر مقدار)' : ''}`).join(', ') });
                     }
                     setSummaryParams(params.length > 0 ? params : null);
 
@@ -200,9 +256,14 @@ const SearchModule = (() => {
                     EventBus.emit('search:completed', response);
                     showToast(response.message, 'success');
 
-                    // Advance wizard to Results step
+                    // Advance wizard to Results step (or directly to Process
+                    // for OVT, which skips the results/query mechanism)
                     if (window.WizardNavigation) {
-                        window.WizardNavigation.goToStep(4);
+                        if (criteria.dataset === 'OVT') {
+                            window.WizardNavigation.goToStep(5);
+                        } else {
+                            window.WizardNavigation.goToStep(4);
+                        }
                     }
                 } else {
                     showToast(response.message, 'error');
@@ -213,6 +274,39 @@ const SearchModule = (() => {
                 showToast('خطا در ارتباط با سرور', 'error');
                 console.error('Search error:', error);
             });
+    }
+
+    function scheduleAvailableDatesRefresh() {
+        clearTimeout(availDebounceTimer);
+        availDebounceTimer = setTimeout(refreshAvailableDates, 300);
+    }
+
+    /**
+     * Fetch imagery availability for the currently visible calendar months
+     * and current region + dataset, then highlight those days.
+     */
+    function refreshAvailableDates() {
+        if (!lastVisibleWindow) return;
+        const bounds = readFormBounds();
+        const dataset = AppState.searchCriteria.dataset;
+        if (!bounds || !dataset || !AVAILABLE_DATASETS.has(dataset)) return;
+
+        const seq = ++availReqSeq;
+        ApiService.fetchAvailableDates(
+            bounds, dataset, lastVisibleWindow.start, lastVisibleWindow.end
+        ).then(dates => {
+            if (seq !== availReqSeq) return;   // a newer request superseded this one
+            JalaliDatePicker.setAvailableDates(dates);
+        });
+    }
+
+    function readFormBounds() {
+        const parse = (id) => parseFloat(document.getElementById(id).value);
+        const north = parse('North'), south = parse('South');
+        const east = parse('East'), west = parse('West');
+        if (![north, south, east, west].every(Number.isFinite)) return null;
+        if (north <= south || east <= west) return null;
+        return { north, south, east, west };
     }
 
     return {

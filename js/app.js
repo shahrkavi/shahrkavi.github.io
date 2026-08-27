@@ -61,6 +61,7 @@ const AppState = {
     },
     searchResults: [],
     osmInfo: null,  // OSM search summary {count, truncated, download_url}
+    overtureInfo: null,  // Overture Maps buildings summary {total, truncated, download_url}
     weatherInfo: null,  // Weather search summary {count, stations}
     demInfo: null,  // DEM search summary {count, tiles}
     cart: [],
@@ -160,7 +161,20 @@ function initWizardNavigation() {
     document.querySelectorAll('.btn-next').forEach(btn => {
         btn.addEventListener('click', () => {
             const targetStep = parseInt(btn.dataset.nextStep);
-            if (targetStep >= 1 && targetStep <= 5) {
+            if (targetStep < 1 || targetStep > 5) return;
+
+            // A search is triggered when leaving the dataset step for a
+            // skip-query dataset (DEM/OVT) or when leaving the query step,
+            // so spin the button until the search responds.
+            const dataset = AppState.searchCriteria.dataset || '';
+            const triggersSearch =
+                (AppState.currentStep === 2 && targetStep === 3
+                    && DatasetsModule && DatasetsModule.skipsQuery(dataset)) ||
+                (AppState.currentStep === 3 && targetStep === 4);
+
+            if (triggersSearch) {
+                withButtonLoading(btn, () => nextStep(targetStep), 'در حال جستجو...');
+            } else {
                 nextStep(targetStep);
             }
         });
@@ -170,9 +184,13 @@ function initWizardNavigation() {
     document.querySelectorAll('.btn-prev').forEach(btn => {
         btn.addEventListener('click', () => {
             let targetStep = parseInt(btn.dataset.prevStep);
-            // For DEM, skip the query tab when going back from results
             const dataset = AppState.searchCriteria.dataset || '';
+            // For DEM, skip the query tab when going back from results
             if (targetStep === 3 && dataset === 'DEM' && AppState.currentStep >= 4) {
+                targetStep = 2;
+            }
+            // For OVT, skip both query and results tabs when going back from process
+            if (targetStep === 4 && dataset === 'OVT' && AppState.currentStep === 5) {
                 targetStep = 2;
             }
             if (targetStep >= 1 && targetStep <= 5) {
@@ -190,16 +208,14 @@ function initWizardNavigation() {
             if (!validateRegionStep()) return;
         } else if (AppState.currentStep === 2) {
             if (!validateDatasetStep()) return;
-            // DEM skips the query step: run search and go to results
+            // DEM and OVT skip the query step: run search and go to results/process
             const dataset = AppState.searchCriteria.dataset || '';
             if (targetStep === 3 && DatasetsModule && DatasetsModule.skipsQuery(dataset)) {
-                SearchModule.execute();
-                return;
+                return SearchModule.execute();
             }
         } else if (AppState.currentStep === 3) {
             // Step 3 -> 4: execute search first
-            SearchModule.execute();
-            return; // goToStep(4) happens when search completes
+            return SearchModule.execute();
         } else if (AppState.currentStep === 4) {
             // Step 4 -> 5: validate that a scene is selected
             if (!validateResultsStep()) return;
@@ -303,6 +319,10 @@ function initWizardNavigation() {
         if (dataset === 'WTH') {
             // Weather stations have no selection step; the process tab is not
             // applicable, so nothing is validated here.
+            return true;
+        }
+        if (dataset === 'OVT') {
+            // Overture buildings have no selection step either.
             return true;
         }
         if (dataset === 'DEM') {
@@ -465,20 +485,6 @@ function removeFromCart(sceneId) {
 }
 
 /**
- * Add all results to cart
- */
-function addAllToCart() {
-    const newItems = AppState.searchResults
-        .map(r => r.id)
-        .filter(id => !AppState.cart.includes(id));
-
-    AppState.cart = [...AppState.cart, ...newItems];
-    updateCartUI();
-    EventBus.emit('cart:updated', AppState.cart);
-    showToast(`${toPersianNum(newItems.length)} تصویر به سبد اضافه شد`, 'success');
-}
-
-/**
  * Trigger a browser download for a URL
  */
 function triggerDownload(url) {
@@ -491,11 +497,73 @@ function triggerDownload(url) {
 }
 
 /**
+ * Disable a button and replace its label with a spinner while an async
+ * operation runs, then restores the original state once the returned
+ * promise settles (success or failure).
+ * @param {HTMLElement|null} btn
+ * @param {() => any} task - function returning a promise (or a value)
+ * @param {string} [label] - text shown next to the spinner while busy
+ * @returns {Promise}
+ */
+function withButtonLoading(btn, task, label) {
+    if (!btn) {
+        return Promise.resolve().then(task);
+    }
+    const originalHtml = btn.innerHTML;
+    const wasDisabled = btn.disabled;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> ${label || 'در حال بارگذاری...'}`;
+    return Promise.resolve()
+        .then(task)
+        .finally(() => {
+            btn.disabled = wasDisabled;
+            btn.innerHTML = originalHtml;
+        });
+}
+
+/**
+ * Fetch a file from the backend and save it to disk as a blob download.
+ * Useful so a caller can wait for the HTTP response before re-enabling the
+ * triggering button (unlike `triggerDownload`, which is fire-and-forget).
+ * @param {string} url
+ * @param {string} [fallbackFilename]
+ * @returns {Promise<string|null>} the resolved filename, or null on error
+ */
+async function fetchAndDownload(url, fallbackFilename) {
+    const res = await fetch(url);
+    if (!res.ok) {
+        let msg = `خطا در دانلود (${res.status})`;
+        try {
+            const err = await res.json();
+            if (err.detail || err.message) msg = err.detail || err.message;
+        } catch (e) { /* ignore */ }
+        throw new Error(msg);
+    }
+    const blob = await res.blob();
+    let name = fallbackFilename || '';
+    const cd = res.headers.get('Content-Disposition') || '';
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+    if (match && match[1]) name = decodeURIComponent(match[1]);
+    const urlObj = URL.createObjectURL(blob);
+    try {
+        const a = document.createElement('a');
+        a.href = urlObj;
+        a.download = name || 'download';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } finally {
+        URL.revokeObjectURL(urlObj);
+    }
+    return name || null;
+}
+
+/**
  * Download a single scene as an image (no cart needed)
  */
 function downloadScene(sceneId) {
     if (!sceneId) return;
-    const url = `http://127.0.0.1:8000/landsat/download-image?scene_id=${encodeURIComponent(sceneId)}`;
+    const url = `${API_BASE}/landsat/download-image?scene_id=${encodeURIComponent(sceneId)}`;
     showToast(`در حال دانلود تصویر ${sceneId}...`, 'info');
     triggerDownload(url);
 }
@@ -509,9 +577,11 @@ function downloadCart() {
         return;
     }
     const ids = AppState.cart.map(encodeURIComponent).join(',');
-    const url = `http://127.0.0.1:8000/landsat/download-zip?scene_ids=${ids}`;
+    const url = `${API_BASE}/landsat/download-zip?scene_ids=${ids}`;
     showToast(`در حال آماده‌سازی ${toPersianNum(AppState.cart.length)} تصویر به صورت فایل فشرده...`, 'info');
-    triggerDownload(url);
+    return fetchAndDownload(url, 'shahrkavi_download.zip')
+        .then(() => showToast('دانلود آغاز شد', 'success'))
+        .catch(error => showToast(error.message, 'error'));
 }
 
 /**
@@ -523,6 +593,65 @@ function toPersianNum(num) {
 }
 
 /**
+ * Jalali <-> Gregorian conversion (jalaali-js algorithms).
+ * Accurate across leap-year boundaries, unlike naive 33-year approximations.
+ */
+const JALALI_BREAKS = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210,
+    1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];
+
+function _jdiv(a, b) { return ~~(a / b); }
+function _jmod(a, b) { return a - ~~(a / b) * b; }
+
+function _jalCal(jy) {
+    const bl = JALALI_BREAKS.length;
+    const gy = jy + 621;
+    let leapJ = -14;
+    let jp = JALALI_BREAKS[0];
+    let jm, jump = 0, leap, n, i;
+
+    if (jy < jp || jy >= JALALI_BREAKS[bl - 1]) {
+        throw new Error('Invalid Jalali year ' + jy);
+    }
+    for (i = 1; i < bl; i += 1) {
+        jm = JALALI_BREAKS[i];
+        jump = jm - jp;
+        if (jy < jm) break;
+        leapJ = leapJ + _jdiv(jump, 33) * 8 + _jdiv(_jmod(jump, 33), 4);
+        jp = jm;
+    }
+    n = jy - jp;
+    leapJ = leapJ + _jdiv(n, 33) * 8 + _jdiv(_jmod(n, 33) + 3, 4);
+    if (_jmod(jump, 33) === 4 && jump - n === 4) leapJ += 1;
+
+    const leapG = _jdiv(gy, 4) - _jdiv((_jdiv(gy, 100) + 1) * 3, 4) - 150;
+    const march = 20 + leapJ - leapG;
+
+    if (jump - n < 6) n = n - jump + _jdiv(jump + 4, 33) * 33;
+    leap = _jmod(_jmod(n + 1, 33) - 1, 4);
+    if (leap === -1) leap = 4;
+
+    return { leap: leap, gy: gy, march: march };
+}
+
+function _g2d(gy, gm, gd) {
+    let d = _jdiv((gy + _jdiv(gm - 8, 6) + 100100) * 1461, 4)
+        + _jdiv(153 * _jmod(gm + 9, 12) + 2, 5)
+        + gd - 34840408;
+    d = d - _jdiv(_jdiv(gy + 100100 + _jdiv(gm - 8, 6), 100) * 3, 4) + 752;
+    return d;
+}
+
+function _d2g(jdn) {
+    let j = 4 * jdn + 139361631;
+    j = j + _jdiv(_jdiv(4 * jdn + 183187720, 146097) * 3, 4) * 4 - 3908;
+    const i = _jdiv(_jmod(j, 1461), 4) * 5 + 308;
+    const gd = _jdiv(_jmod(i, 153), 5) + 1;
+    const gm = _jmod(_jdiv(i, 153), 12) + 1;
+    const gy = _jdiv(j, 1461) - 100100 + _jdiv(8 - gm, 6);
+    return [gy, gm, gd];
+}
+
+/**
  * Convert Gregorian date to Jalali (Shamsi) date
  * @param {number} gy - Gregorian year
  * @param {number} gm - Gregorian month (1-12)
@@ -530,21 +659,79 @@ function toPersianNum(num) {
  * @returns {number[]} [jy, jm, jd] Jalali year, month, day
  */
 function gregorianToJalali(gy, gm, gd) {
-    const gDm = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-    let jy = gy <= 1600 ? 0 : 979;
-    gy -= gy <= 1600 ? 621 : 1600;
-    const gy2 = gm > 2 ? gy + 1 : gy;
-    let days = 365 * gy + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100)
-        + Math.floor((gy2 + 399) / 400) - 80 + gd + gDm[gm - 1];
-    jy += 33 * Math.floor(days / 12053);
-    days %= 12053;
-    jy += 4 * Math.floor(days / 1461);
-    days %= 1461;
-    jy += Math.floor((days - 1) / 365);
-    if (days > 365) days = (days - 1) % 365;
-    const jm = days < 186 ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30);
-    const jd = 1 + (days < 186 ? days % 31 : (days - 186) % 30);
+    const jdn = _g2d(gy, gm, gd);
+    let jy = gy - 621;
+    const r = _jalCal(jy);
+    const jdn1f = _g2d(r.gy, 3, r.march);
+    let k = jdn - jdn1f;
+    let jm, jd;
+
+    if (k >= 0) {
+        if (k <= 185) {
+            jm = 1 + _jdiv(k, 31);
+            jd = _jmod(k, 31) + 1;
+            return [jy, jm, jd];
+        }
+        k -= 186;
+    } else {
+        jy -= 1;
+        k += 179;
+        if (r.leap === 1) k += 1;
+    }
+    jm = 7 + _jdiv(k, 30);
+    jd = _jmod(k, 30) + 1;
     return [jy, jm, jd];
+}
+
+/**
+ * Convert Jalali (Shamsi) date to Gregorian date
+ * @param {number} jy - Jalali year
+ * @param {number} jm - Jalali month (1-12)
+ * @param {number} jd - Jalali day
+ * @returns {number[]} [gy, gm, gd] Gregorian year, month, day
+ */
+function jalaliToGregorian(jy, jm, jd) {
+    const r = _jalCal(jy);
+    const jdn = _g2d(r.gy, 3, r.march) + (jm - 1) * 31 - _jdiv(jm, 7) * (jm - 7) + jd - 1;
+    return _d2g(jdn);
+}
+
+/**
+ * Number of days in a Jalali month
+ */
+function jalaliMonthLength(jy, jm) {
+    if (jm <= 6) return 31;
+    if (jm <= 11) return 30;
+    return _jalCal(jy).leap === 0 ? 30 : 29;
+}
+
+/** ISO "YYYY-MM-DD" -> Jalali display string with Persian digits */
+function isoToJalaliString(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const [jy, jm, jd] = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    const mm = String(jm).padStart(2, '0');
+    const dd = String(jd).padStart(2, '0');
+    return toPersianNum(`${jy}/${mm}/${dd}`);
+}
+
+/** Latin digits for parsing typed input */
+function toLatinDigits(str) {
+    return String(str ?? '')
+        .replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+        .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+}
+
+/** Jalali string like "1404/06/15" (either digit set) -> ISO "2025-09-06" or '' */
+function jalaliStringToIso(str) {
+    const clean = toLatinDigits(str).trim().replace(/[-.]/g, '/');
+    const m = clean.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (!m) return '';
+    const jy = parseInt(m[1], 10), jm = parseInt(m[2], 10), jd = parseInt(m[3], 10);
+    if (jm < 1 || jm > 12 || jd < 1 || jd > jalaliMonthLength(jy, jm)) return '';
+    const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
+    return `${gy}-${String(gm).padStart(2, '0')}-${String(gd).padStart(2, '0')}`;
 }
 
 /**

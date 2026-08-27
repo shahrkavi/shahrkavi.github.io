@@ -58,7 +58,6 @@ test_*.py
 *_msg.txt
 *_links*.txt
 _osm_debug.html
-processing.html
 crop_err.txt
 crop_err2.txt
 

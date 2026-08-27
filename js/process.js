@@ -29,13 +29,13 @@ const ProcessModule = (() => {
         // Run process button
         const btnRun = document.getElementById('btnRunProcess');
         if (btnRun) {
-            btnRun.addEventListener('click', runProcess);
+            btnRun.addEventListener('click', () => withButtonLoading(btnRun, runProcess, 'در حال پردازش...'));
         }
 
         // Download processed result
         const btnDownload = document.getElementById('btnDownloadProcessed');
         if (btnDownload) {
-            btnDownload.addEventListener('click', downloadProcessedResult);
+            btnDownload.addEventListener('click', () => withButtonLoading(btnDownload, downloadProcessedResult, 'در حال دانلود...'));
         }
 
         // Add result to map
@@ -47,7 +47,13 @@ const ProcessModule = (() => {
         // OSM vector export
         const btnOsmExport = document.getElementById('btnOsmExport');
         if (btnOsmExport) {
-            btnOsmExport.addEventListener('click', runOsmExport);
+            btnOsmExport.addEventListener('click', () => withButtonLoading(btnOsmExport, runOsmExport, 'در حال تبدیل و دانلود...'));
+        }
+
+        // Overture buildings export
+        const btnOvtExport = document.getElementById('btnOvtExport');
+        if (btnOvtExport) {
+            btnOvtExport.addEventListener('click', () => withButtonLoading(btnOvtExport, runOvtExport, 'در حال ثبت درخواست...'));
         }
 
         // Listen for result selection
@@ -72,6 +78,7 @@ const ProcessModule = (() => {
         { value: 'custom_band', label: 'ترکیب سفارشی باندها' },
         { value: 'hillshade', label: 'سایه‌رسانی (Hillshade)' },
         { value: 'elevation', label: 'نقشه ارتفاعی رنگی' },
+        { value: 'height_points', label: 'نقاط ارتفاعی (نمونه‌برداری از DEM)' },
     ];
 
     /**
@@ -88,7 +95,7 @@ const ProcessModule = (() => {
             options = PROCESS_TYPE_OPTIONS.filter(o => o.value === 'crop');
         } else if (dataset === 'DEM') {
             options = PROCESS_TYPE_OPTIONS.filter(o =>
-                ['crop', 'hillshade', 'elevation'].includes(o.value)
+                ['crop', 'hillshade', 'elevation', 'height_points'].includes(o.value)
             );
         } else {
             options = PROCESS_TYPE_OPTIONS;
@@ -125,6 +132,12 @@ const ProcessModule = (() => {
             return;
         }
 
+        // Overture buildings are exported to vector formats as well.
+        if (isOvtMode()) {
+            showOvtExportMode();
+            return;
+        }
+
         showImageProcessMode();
         updateSelectedSceneDisplay();
         populateProcessScenes();
@@ -144,6 +157,10 @@ const ProcessModule = (() => {
 
     function isDemMode() {
         return (AppState.searchCriteria.dataset || '') === 'DEM';
+    }
+
+    function isOvtMode() {
+        return (AppState.searchCriteria.dataset || '') === 'OVT';
     }
 
     function showWeatherMode() {
@@ -181,6 +198,9 @@ const ProcessModule = (() => {
         });
         const exportSection = document.getElementById('osmExportSection');
         if (exportSection) exportSection.style.display = 'none';
+
+        // Re-apply section visibility for the currently selected process type
+        updateSectionVisibility();
     }
 
     function showOsmExportMode() {
@@ -225,6 +245,70 @@ const ProcessModule = (() => {
         `).join('');
     }
 
+    function showOvtExportMode() {
+        const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection',
+                     'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection',
+                     'osmExportSection', 'heightPointsSettings'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+        const exportSection = document.getElementById('ovtExportSection');
+        if (exportSection) exportSection.style.display = 'block';
+
+        const summary = document.getElementById('ovtExportSummary');
+        if (summary) {
+            const ovt = AppState.overtureInfo || {};
+            summary.textContent = Number.isFinite(ovt.total) && ovt.total > 0
+                ? `${toPersianNum(ovt.total)} ساختمان در محدوده انتخابی موجود است. فرمت خروجی را انتخاب کرده و دکمه تبدیل را بزنید.`
+                : 'در حال جستجو... لطفاً صبر کنید یا دوباره جستجو را اجرا کنید.';
+        }
+    }
+
+    function runOvtExport() {
+        const bounds = getDefinedRegionBounds();
+        if (!bounds) {
+            showToast('ابتدا محدوده جغرافیایی را در تب اول تعریف کنید', 'warning');
+            return;
+        }
+
+        const format = document.getElementById('ovtExportFormat')?.value || 'shp';
+        showToast('در حال ارسال درخواست تبدیل...', 'info');
+
+        return fetch(`${API_BASE}/overture/buildings/export-async`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                north: bounds.north,
+                south: bounds.south,
+                east: bounds.east,
+                west: bounds.west,
+                format,
+                limit: 20000,
+            }),
+        })
+            .then(async res => {
+                const response = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    showToast(response.detail || response.message || `خطا در ارسال درخواست (${res.status})`, 'error');
+                    return;
+                }
+                if (response.job_id) {
+                    showToast('درخواست شما در صف پردازش قرار گرفت', 'success');
+                    // Give the toast a moment to render, then open the job page
+                    setTimeout(() => {
+                        window.location.href = `processing.html?job=${encodeURIComponent(response.job_id)}&source=overture`;
+                    }, 800);
+                } else {
+                    showToast(response.message || 'خطا در ارسال درخواست', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('خطا در ارتباط با سرور: ' + error.message, 'error');
+                console.error('OVT export error:', error);
+            });
+    }
+
     function runOsmExport() {
         const container = document.getElementById('osmExportLayers');
         const layers = ((AppState.osmInfo && AppState.osmInfo.layers) || []).slice();
@@ -262,14 +346,11 @@ const ProcessModule = (() => {
             limit: 5000,
         });
 
-        const url = `window.location.origin/osm/export?${params}`;
+        const url = `${API_BASE}/osm/export?${params}`;
         showToast('در حال آماده‌سازی فایل خروجی...', 'info');
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        return fetchAndDownload(url, 'osm_export.zip')
+            .then(() => showToast('دانلود آغاز شد', 'success'))
+            .catch(error => showToast(error.message, 'error'));
     }
 
     function escapeHtml(str) {
@@ -400,13 +481,33 @@ const ProcessModule = (() => {
         currentProcessType = e.target.value;
 
         // Show/hide relevant settings sections
+        updateSectionVisibility();
+        updateProcessBandSelection();
+
+        // Hide previous result
+        hideProcessResult();
+    }
+
+    /**
+     * Toggle crop/band/custom-band sections based on the selected process type.
+     */
+    function updateSectionVisibility() {
         const cropSettings = document.getElementById('cropSettings');
         const bandSettings = document.getElementById('bandSettings');
         const customBandSettings = document.getElementById('customBandSettings');
+        const heightPointsSettings = document.getElementById('heightPointsSettings');
 
-        // Hide all first
+        // Hide optional settings first
         if (bandSettings) bandSettings.style.display = 'none';
         if (customBandSettings) customBandSettings.style.display = 'none';
+        if (heightPointsSettings) heightPointsSettings.style.display = 'none';
+
+        // Height points have their own sampling settings; crop is irrelevant
+        if (currentProcessType === 'height_points') {
+            if (cropSettings) cropSettings.style.display = 'none';
+            if (heightPointsSettings) heightPointsSettings.style.display = 'block';
+            return;
+        }
 
         // Crop is independent from the selected processing operation
         if (cropSettings) cropSettings.style.display = 'block';
@@ -418,10 +519,6 @@ const ProcessModule = (() => {
             // NDVI, NDWI, EVI, truecolor, falsecolor use band settings
             if (bandSettings) bandSettings.style.display = 'block';
         }
-        updateProcessBandSelection();
-
-        // Hide previous result
-        hideProcessResult();
     }
 
     function requiredBandsForProcess() {
@@ -462,22 +559,24 @@ const ProcessModule = (() => {
             return;
         }
 
-        const btnRun = document.getElementById('btnRunProcess');
-        if (btnRun) {
-            btnRun.disabled = true;
-            btnRun.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> در حال پردازش...';
-        }
-
         showToast('در حال پردازش تصویر...', 'info');
 
-        // Crop is optional and always uses the region defined in the first tab
+        // Crop is optional and always uses the region defined in the first tab.
+        // Height points always need the region: it defines the sampling area.
         let cropBounds = null;
         const cropEnabled = document.getElementById('enableProcessCrop')?.checked === true;
-        if (cropEnabled) {
+        if (cropEnabled || currentProcessType === 'height_points') {
             cropBounds = getDefinedRegionBounds();
             if (!cropBounds) {
                 showToast('ابتدا محدوده جغرافیایی را در تب اول تعریف کنید', 'warning');
-                resetRunButton();
+                return;
+            }
+        }
+
+        if (currentProcessType === 'height_points') {
+            const count = parseInt(document.getElementById('hpPointCount')?.value, 10);
+            if (!Number.isFinite(count) || count < 1 || count > 5000) {
+                showToast('تعداد نقاط باید عددی بین ۱ تا ۵۰۰۰ باشد', 'warning');
                 return;
             }
         }
@@ -486,7 +585,7 @@ const ProcessModule = (() => {
         const request = buildProcessRequest(sceneIds, cropBounds);
 
         // Call backend API - jobs are queued and run in the background
-        fetch(API_BASE + 'landsat/process', {
+        return fetch(`${API_BASE}/landsat/process`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(request)
@@ -494,7 +593,6 @@ const ProcessModule = (() => {
             .then(async res => {
                 const response = await res.json().catch(() => ({}));
                 if (!res.ok) {
-                    resetRunButton();
                     showToast(response.detail || response.message || `خطا در ارسال درخواست (${res.status})`, 'error');
                     return;
                 }
@@ -506,16 +604,13 @@ const ProcessModule = (() => {
                     }, 800);
                 } else if (response.success) {
                     // Backward-compatible synchronous result
-                    resetRunButton();
                     showToast('پردازش با موفقیت انجام شد', 'success');
                     showProcessResult(response);
                 } else {
-                    resetRunButton();
                     showToast(response.message || 'خطا در پردازش', 'error');
                 }
             })
             .catch(error => {
-                resetRunButton();
                 showToast('خطا در ارتباط با سرور: ' + error.message, 'error');
                 console.error('Process error:', error);
             });
@@ -599,20 +694,17 @@ const ProcessModule = (() => {
             baseRequest.bands = ['dem'];
         } else if (currentProcessType === 'elevation') {
             baseRequest.bands = ['dem'];
+        } else if (currentProcessType === 'height_points') {
+            baseRequest.bands = ['dem'];
+            baseRequest.point_count = parseInt(document.getElementById('hpPointCount').value, 10);
+            baseRequest.sampling_method = document.getElementById('hpSamplingMethod')?.value || 'random';
+            baseRequest.output_format = document.getElementById('hpOutputFormat')?.value || 'geojson';
         } else if (currentProcessType === 'crop') {
             // Just crop, no specific band requirement
             baseRequest.bands = availableBands.length > 0 ? availableBands.slice(0, 3) : ['red', 'green', 'blue'];
         }
 
         return baseRequest;
-    }
-
-    function resetRunButton() {
-        const btnRun = document.getElementById('btnRunProcess');
-        if (btnRun) {
-            btnRun.disabled = false;
-            btnRun.innerHTML = '<i class="bi bi-play"></i> اجرای پردازش';
-        }
     }
 
     function showProcessResult(response) {
@@ -666,25 +758,24 @@ const ProcessModule = (() => {
         const path = resultDiv.dataset.resultPath;
 
         if (url) {
-            window.open(url, '_blank');
+            // download_url may be API-relative ("/landsat/...") — resolve it
+            const absolute = url.startsWith('/') ? (window.API_BASE || '') + url : url;
+            window.open(absolute, '_blank');
             showToast('دانلود آغاز شد', 'success');
-        } else if (path) {
-            // Try to trigger download via backend
-            fetch(API_BASE + `landsat/download-processed?path=${encodeURIComponent(path)}`)
-                .then(res => res.blob())
-                .then(blob => {
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = path.split('/').pop() || 'processed.tif';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    showToast('دانلود آغاز شد', 'success');
-                })
-                .catch(() => showToast('خطا در دانلود', 'error'));
-        } else {
-            showToast('فایل نتیجه یافت نشد', 'warning');
+            return;
         }
+
+        if (path) {
+            // Try to trigger download via backend
+            return fetchAndDownload(
+                `${API_BASE}/landsat/download-processed?path=${encodeURIComponent(path)}`,
+                path.split('/').pop() || 'processed.tif'
+            )
+                .then(() => showToast('دانلود آغاز شد', 'success'))
+                .catch(() => showToast('خطا در دانلود', 'error'));
+        }
+
+        showToast('فایل نتیجه یافت نشد', 'warning');
     }
 
     function addResultToMap() {

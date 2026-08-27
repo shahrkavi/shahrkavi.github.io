@@ -31,7 +31,7 @@
                 <img src="assets/logo.png" alt="شهرکاوی" class="app-logo" onerror="this.style.display='none'">
                 <div>
                     <h1 class="app-title">شهرکاوی</h1>
-                    <p class="app-subtitle">سامانه جستجوی تصاویر ماهواره‌ای</p>
+                    <p class="app-subtitle">سامانه جستجو و پردازش داده‌های مکانی</p>
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
@@ -134,13 +134,52 @@
                 <!-- Step 2: Dataset Tab (Single Select) -->
                 <div class="tab-pane fade" id="pane-dataset" role="tabpanel">
                     <div class="pane-content">
-                        <div class="search-section mb-3">
-                            <h6 class="section-title">
-                                <i class="bi bi-database"></i> انتخاب دیتاست
-                            </h6>
-                            <p class="text-muted small mb-2">یک ماهواره/سنجنده انتخاب کنید:</p>
+                        <div class="dataset-intro">
+                            <div class="dataset-step-label">گام ۲ از ۵ <span></span> منبع داده</div>
+                            <div class="dataset-intro-heading">
+                                <div class="dataset-intro-icon"><i class="bi bi-database"></i></div>
+                                <div>
+                                    <h2>منبع داده را انتخاب کنید</h2>
+                                    <p>داده‌ای را انتخاب کنید تا گزینه‌های مناسب جستجو و پردازش نمایش داده شود.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="dataset-selection-card" id="datasetSelectionCard" aria-live="polite">
+                            <div class="dataset-selection-empty">
+                                <i class="bi bi-cursor-fill"></i>
+                                <div>
+                                    <strong>هنوز منبعی انتخاب نشده است</strong>
+                                    <span>برای ادامه، یکی از گزینه‌های زیر را انتخاب کنید.</span>
+                                </div>
+                            </div>
+                            <div class="dataset-selection-filled d-none">
+                                <div class="dataset-selection-icon" id="datasetSelectionIcon"><i class="bi bi-database"></i></div>
+                                <div class="dataset-selection-copy">
+                                    <span class="dataset-selection-label">منبع انتخاب‌شده</span>
+                                    <strong id="datasetSelectionName">--</strong>
+                                    <span id="datasetSelectionInfo">--</span>
+                                </div>
+                                <i class="bi bi-check-circle-fill dataset-selection-check"></i>
+                            </div>
+                        </div>
+
+                        <div class="search-section dataset-picker-section mb-3">
+                            <div class="dataset-picker-header">
+                                <div>
+                                    <h6 class="section-title mb-1">
+                                        <i class="bi bi-grid-3x3-gap"></i> فهرست منابع
+                                    </h6>
+                                    <p class="text-muted small mb-0">برای دیدن گزینه‌ها، یک گروه را باز کنید یا جستجو کنید.</p>
+                                </div>
+                                <span class="dataset-required-badge"><i class="bi bi-asterisk"></i> الزامی</span>
+                            </div>
                             <div id="datasetList" class="dataset-tree">
                                 <!-- Dataset list will be injected here -->
+                            </div>
+                            <div class="dataset-picker-hint">
+                                <i class="bi bi-info-circle"></i>
+                                <span>با انتخاب هر منبع، تنظیمات غیرمرتبط به‌صورت خودکار پنهان می‌شوند.</span>
                             </div>
                         </div>
 
@@ -149,7 +188,7 @@
                             <button type="button" class="btn btn-outline-secondary btn-prev" data-prev-step="1">
                                 <i class="bi bi-chevron-right"></i> قبلی
                             </button>
-                            <button type="button" class="btn btn-primary btn-next" data-next-step="3">
+                            <button type="button" class="btn btn-primary btn-next" data-next-step="3" disabled>
                                 بعدی <i class="bi bi-chevron-left"></i>
                             </button>
                         </div>
@@ -165,15 +204,9 @@
                                 <h6 class="section-title">
                                     <i class="bi bi-calendar-range"></i> بازه زمانی
                                 </h6>
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <label class="form-label">از تاریخ</label>
-                                        <input type="date" class="form-control form-control-sm" id="DateFrom">
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="form-label">تا تاریخ</label>
-                                        <input type="date" class="form-control form-control-sm" id="DateTo">
-                                    </div>
+                                <div id="jalaliRangeCalendar" class="jalali-range-calendar"></div>
+                                <div class="form-text small mt-1">
+                                    برای تاریخ مشخص یک روز و برای بازه، دو روز را انتخاب کنید؛ روزهای دارای نقطه سبز تصویر موجود دارند.
                                 </div>
                             </div>
 
@@ -235,24 +268,8 @@
                                         ۰ تصویر انتخاب شده
                                     </span>
                                 </div>
-                                <div class="d-flex gap-1">
-                                    <button class="btn btn-outline-success btn-sm" id="btnSelectAllResults" disabled>
-                                        <i class="bi bi-check2-square"></i> انتخاب همه
-                                    </button>
-                                    <button class="btn btn-outline-primary btn-sm" id="btnAddAllToCart" disabled>
-                                        <i class="bi bi-cart-plus"></i> افزودن همه به سبد
-                                    </button>
-                                    <button class="btn btn-outline-secondary btn-sm" id="btnExportResults" disabled>
-                                        <i class="bi bi-download"></i>
-                                    </button>
-                                </div>
                             </div>
                             <div class="row g-2 mt-2" id="dateFilterRow">
-                                <div class="col-md-6">
-                                    <label class="form-label small mb-1" for="resultDateFilter">تاریخ‌های موجود</label>
-                                    <select class="form-select form-select-sm" id="resultDateFilter">
-                                    </select>
-                                </div>
                                 <div class="col-md-6 d-flex align-items-end">
                                     <div class="small text-muted pb-1" id="resultsCloudAverage">
                                         میانگین پوشش ابر: ---
@@ -262,12 +279,20 @@
 
                             <!-- OSM results summary (only for the OSM dataset) -->
                             <div class="row g-2 mt-2 d-none" id="osmResultsSummary">
-                                <div class="col-md-8">
+                                <div class="col">
                                     <div class="small text-muted" id="osmResultsNote"></div>
                                 </div>
-                                <div class="col-md-4 d-flex justify-content-md-end">
-                                    <a class="btn btn-primary btn-sm" id="btnOsmDownload" href="#" download>
-                                        <i class="bi bi-download"></i> دانلود داده‌های OSM (GeoJSON)
+                            </div>
+
+                            <!-- Overture buildings summary (only for the OVT dataset) -->
+                            <div class="row g-2 mt-2 d-none" id="ovtResultsSummary">
+                                <div class="col-12 d-flex align-items-center gap-2 flex-wrap">
+                                    <div class="small text-muted flex-grow-1" id="ovtResultsNote"></div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnOvtPreview">
+                                        <i class="bi bi-map"></i> نمایش روی نقشه
+                                    </button>
+                                    <a class="btn btn-sm btn-outline-primary" id="btnOvtDownloadGeojson" href="#">
+                                        <i class="bi bi-download"></i> دانلود GeoJSON
                                     </a>
                                 </div>
                             </div>
@@ -461,6 +486,61 @@
                             </div>
                         </div>
 
+                        <!-- Height Points Sampling Settings (DEM + نقاط ارتفاعی process) -->
+                        <div class="search-section" id="heightPointsSettings" style="display:none;">
+                            <h6 class="section-title">
+                                <i class="bi bi-diagram-3"></i> تنظیمات نقاط ارتفاعی
+                            </h6>
+                            <div class="mb-2">
+                                <label class="form-label" for="hpPointCount">تعداد نقاط</label>
+                                <input type="number" class="form-control form-control-sm" id="hpPointCount"
+                                       min="1" max="5000" step="1" value="100">
+                            </div>
+                            <div>
+                                <label class="form-label" for="hpSamplingMethod">روش نمونه‌برداری</label>
+                                <select class="form-select form-select-sm" id="hpSamplingMethod">
+                                    <option value="random">تصادفی</option>
+                                    <option value="grid">شبکه‌ای (گرید)</option>
+                                </select>
+                            </div>
+                            <div class="mt-2">
+                                <label class="form-label" for="hpOutputFormat">فرمت خروجی</label>
+                                <select class="form-select form-select-sm" id="hpOutputFormat">
+                                    <option value="geojson">GeoJSON</option>
+                                    <option value="shp">Shapefile (ZIP)</option>
+                                    <option value="gpkg">GeoPackage (GPKG)</option>
+                                    <option value="csv">CSV</option>
+                                </select>
+                            </div>
+                            <div class="form-text small mt-2">
+                                ارتفاع هر نقطه از کاشی‌های DEM انتخاب‌شده در تب نتایج و در محدوده تب «منطقه» محاسبه می‌شود.
+                            </div>
+                        </div>
+
+                        <!-- Overture Buildings Export Section (only for the OVT dataset) -->
+                        <div class="search-section" id="ovtExportSection" style="display:none;">
+                            <h6 class="section-title">
+                                <i class="bi bi-buildings"></i> تبدیل ساختمانهای Overture Maps
+                            </h6>
+                            <p class="text-muted small mb-2">
+                                ساختمانهای محدوده انتخابی را می‌توانید به فرمت‌های برداری مختلف تبدیل و دانلود کنید.
+                            </p>
+                            <div class="small text-muted mb-2" id="ovtExportSummary"></div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1" for="ovtExportFormat">فرمت خروجی</label>
+                                <select class="form-select form-select-sm" id="ovtExportFormat">
+                                    <option value="shp">Shapefile (ZIP)</option>
+                                    <option value="geojson">GeoJSON</option>
+                                    <option value="gpkg">GeoPackage (GPKG)</option>
+                                </select>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-primary btn-sm" id="btnOvtExport">
+                                    <i class="bi bi-box-arrow-down"></i> تبدیل و دانلود
+                                </button>
+                            </div>
+                        </div>
+
 
                         <!-- Wizard Navigation -->
                         <div class="wizard-nav">
@@ -508,14 +588,10 @@
                     <select class="form-select form-select-sm" id="basemapSelect" aria-label="انتخاب نقشه پایه">
                         <option value="satellite">ماهواره‌ای</option>
                         <option value="osm">OpenStreetMap</option>
-                        <option value="topo">توپوگرافی</option>
-                        <option value="streets" selected>خیابان‌ها</option>
+                        <option value="streets" selected>زمین</option>
                     </select>
                 </div>
                 <div class="btn-group-vertical" role="group">
-                    <button class="btn btn-light map-tool-btn" data-tool="point" title="انتخاب نقطه">
-                        <i class="bi bi-geo-alt"></i>
-                    </button>
                     <button class="btn btn-light map-tool-btn" data-tool="rectangle" title="انتخاب مستطیل">
                         <i class="bi bi-bounding-box"></i>
                     </button>
@@ -556,6 +632,7 @@
     <script src="js/treeview.js"></script>
     <script src="js/api.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/jalali-datepicker.js"></script>
     <script src="js/map.js"></script>
     <script src="js/search.js"></script>
     <script src="js/datasets.js"></script>

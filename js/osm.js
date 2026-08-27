@@ -1,9 +1,8 @@
 /**
  * Shahrkavi - OSM Tag Filter Module
  * Manages the key/value pair rows used to filter OpenStreetMap data.
- * Both the key and the value are Bootstrap dropdowns. Selecting a key
- * loads the common values for that tag key (via Taginfo) into the value
- * dropdown of the same row.
+ * Both fields are comboboxes: selectable from suggestions, searchable as
+ * you type, and freely typable for arbitrary keys/values.
  */
 
 const OsmModule = (() => {
@@ -46,7 +45,102 @@ const OsmModule = (() => {
     }
 
     /**
-     * Build a key/value pair row with Bootstrap dropdowns.
+     * Markup for one combobox field (input + suggestion menu).
+     */
+    function comboHtml(inputClass, val, placeholder) {
+        return `
+            <div class="osm-combo position-relative">
+                <input type="text" class="form-control form-control-sm ${inputClass}"
+                       value="${escapeAttr(val)}" placeholder="${escapeAttr(placeholder)}"
+                       dir="ltr" autocomplete="off" spellcheck="false">
+                <div class="osm-combo-menu shadow d-none"></div>
+            </div>
+        `;
+    }
+
+    /**
+     * Attach combobox behaviour to an input + menu pair.
+     * getItems() must return [{ value, hint? }]. The list is filtered by
+     * whatever the user types; any typed text is accepted as-is.
+     */
+    function attachCombo(input, menu, getItems) {
+        function render() {
+            const query = input.value.trim().toLowerCase();
+            const items = getItems().filter(it =>
+                !query || it.value.toLowerCase().includes(query)
+            );
+
+            if (items.length === 0) {
+                menu.innerHTML =
+                    '<div class="osm-combo-empty">موردی یافت نشد — Enter برای استفاده از متن تایپ‌شده</div>';
+            } else {
+                menu.innerHTML = items.map((it, i) => `
+                    <button type="button"
+                            class="osm-combo-item${i === 0 ? ' active' : ''}"
+                            data-value="${escapeAttr(it.value)}">
+                        <span class="text-truncate" dir="ltr">${escapeAttr(it.value)}</span>
+                        ${it.hint ? `<span class="text-muted small text-nowrap">${it.hint}</span>` : ''}
+                    </button>
+                `).join('');
+            }
+            menu.classList.remove('d-none');
+        }
+
+        function close() {
+            menu.classList.add('d-none');
+        }
+
+        input.addEventListener('focus', render);
+        input.addEventListener('input', render);
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                // Commit exactly what was typed
+                e.preventDefault();
+                input.dispatchEvent(new Event('change'));
+                close();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                close();
+                input.blur();
+            }
+        });
+
+        // Delayed close so item mousedown registers first
+        input.addEventListener('blur', () => setTimeout(close, 150));
+
+        // mousedown beats the input blur
+        menu.addEventListener('mousedown', (e) => {
+            const item = e.target.closest('.osm-combo-item');
+            if (!item) return;
+            e.preventDefault();
+            input.value = item.dataset.value;
+            close();
+            input.dispatchEvent(new Event('change'));
+        });
+
+        return { close };
+    }
+
+    async function fetchTagValues(key) {
+        try {
+            const res = await fetch(
+                `${API_BASE}/osm/tag-values?key=${encodeURIComponent(key)}`
+            );
+            if (!res.ok) throw new Error('bad status');
+            const data = await res.json();
+            return (data.values || []).slice(0, VALUE_LIMIT).map(v => ({
+                value: v.value,
+                hint: formatCount(v.count),
+            }));
+        } catch (e) {
+            console.error('OSM tag-values error:', e);
+            return [];
+        }
+    }
+
+    /**
+     * Build a key/value pair row with two searchable/typable comboboxes.
      */
     function addPairRow(key, value) {
         const container = document.getElementById('osmTagPairs');
@@ -59,34 +153,10 @@ const OsmModule = (() => {
         row.className = 'osm-pair-row row g-1 align-items-center mb-2';
         row.innerHTML = `
             <div class="col-5">
-                <div class="dropdown osm-key-dropdown w-100">
-                    <input type="hidden" class="osm-key-input" value="${escapeAttr(key || '')}">
-                    <button class="btn btn-sm btn-outline-secondary w-100 dropdown-toggle text-truncate"
-                            type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <span class="osm-key-label">${key ? escapeAttr(key) : 'کلید را انتخاب کنید'}</span>
-                    </button>
-                    <input type="text" class="form-control form-control-sm osm-key-custom d-none"
-                           placeholder="کلید دلخواه (Enter برای ثبت)" dir="ltr">
-                    <ul class="dropdown-menu osm-key-menu w-100" style="max-height:280px; overflow-y:auto;">
-                        <li><a class="dropdown-item" href="#" data-custom="1"><i class="bi bi-keyboard"></i> کلید دلخواه...</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        ${COMMON_KEYS.map(k =>
-                            `<li><a class="dropdown-item" href="#" data-key="${escapeAttr(k)}" dir="ltr">${escapeAttr(k)}</a></li>`
-                        ).join('')}
-                    </ul>
-                </div>
+                ${comboHtml('osm-key-input', key || '', 'کلید (مثلاً highway)...')}
             </div>
             <div class="col-5">
-                <div class="dropdown osm-value-dropdown w-100">
-                    <input type="hidden" class="osm-value-input" value="${escapeAttr(value || '')}">
-                    <button class="btn btn-sm btn-outline-secondary w-100 dropdown-toggle text-truncate"
-                            type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <span class="osm-value-label">${value ? escapeAttr(value) : 'مقدار را انتخاب کنید'}</span>
-                    </button>
-                    <ul class="dropdown-menu osm-value-menu w-100" style="max-height:280px; overflow-y:auto;">
-                        <li><span class="dropdown-item-text small text-muted">ابتدا کلید را انتخاب کنید</span></li>
-                    </ul>
-                </div>
+                ${comboHtml('osm-value-input', value || '', 'مقدار...')}
             </div>
             <div class="col-2 d-flex align-items-center gap-1">
                 <div class="form-check form-check-inline m-0">
@@ -100,89 +170,43 @@ const OsmModule = (() => {
         `;
 
         const keyInput = row.querySelector('.osm-key-input');
-        const keyBtn = row.querySelector('.osm-key-dropdown .dropdown-toggle');
-        const keyLabel = row.querySelector('.osm-key-label');
-        const keyCustom = row.querySelector('.osm-key-custom');
-        const keyMenu = row.querySelector('.osm-key-menu');
 
         const valueInput = row.querySelector('.osm-value-input');
-        const valueLabel = row.querySelector('.osm-value-label');
-        const valueBtn = row.querySelector('.osm-value-dropdown .dropdown-toggle');
-        const valueMenu = row.querySelector('.osm-value-menu');
+        const valueMenu = valueInput.closest('.osm-combo').querySelector('.osm-combo-menu');
         const anyCheck = row.querySelector('.osm-any-check');
 
-        // --- Key selection -------------------------------------------------
+        let valueItems = [];
+        let lastFetchedKey = null;
 
-        function setKey(val) {
-            keyInput.value = val;
-            keyLabel.textContent = val;
-            keyCustom.classList.add('d-none');
-            keyBtn.classList.remove('d-none');
-            // Selecting a new key invalidates the old value
-            valueInput.value = '';
-            valueLabel.textContent = 'مقدار را انتخاب کنید';
-            loadValuesForKey(val, valueMenu);
-        }
+        attachCombo(keyInput, keyInput.closest('.osm-combo').querySelector('.osm-combo-menu'), () =>
+            COMMON_KEYS.map(k => ({ value: k }))
+        );
+        attachCombo(valueInput, valueMenu, () => valueItems);
 
-        function enterCustomKey() {
-            keyBtn.classList.add('d-none');
-            keyCustom.classList.remove('d-none');
-            keyCustom.focus();
-        }
+        // When the key is committed, refresh the value suggestions
+        keyInput.addEventListener('change', async () => {
+            const val = keyInput.value.trim();
+            if (!val || val === lastFetchedKey) return;
 
-        keyMenu.addEventListener('click', (e) => {
-            const item = e.target.closest('.dropdown-item');
-            if (!item) return;
-            e.preventDefault();
-            if (item.dataset.custom) {
-                enterCustomKey();
-                return;
+            lastFetchedKey = val;
+            // A new key invalidates the old value
+            if (valueInput.value) {
+                valueInput.value = '';
             }
-            const val = item.getAttribute('data-key');
-            if (val) setKey(val);
-        });
-
-        keyCustom.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const val = keyCustom.value.trim();
-                if (val) {
-                    setKey(val);
-                } else {
-                    keyCustom.classList.add('d-none');
-                    keyBtn.classList.remove('d-none');
-                }
-                keyCustom.blur();
-            }
-            if (e.key === 'Escape') {
-                keyCustom.classList.add('d-none');
-                keyBtn.classList.remove('d-none');
-                keyCustom.value = '';
-            }
+            valueItems = [];
+            valueItems = await fetchTagValues(val);
         });
 
         // --- "any value" checkbox -------------------------------------------
 
         anyCheck.addEventListener('change', () => {
-            valueBtn.disabled = anyCheck.checked;
-            if (anyCheck.checked) {
+            valueInput.disabled = anyCheck.checked;
+            if (anyCheck.checked && valueInput.value) {
                 valueInput.value = '';
-                valueLabel.textContent = 'هر مقدار';
-            } else if (!valueInput.value) {
-                valueLabel.textContent = 'مقدار را انتخاب کنید';
             }
+            valueInput.placeholder = anyCheck.checked ? 'هر مقداری' : 'مقدار...';
         });
-
-        // --- Value selection -------------------------------------------------
-
-        valueMenu.addEventListener('click', (e) => {
-            const item = e.target.closest('.dropdown-item');
-            if (!item) return;
-            e.preventDefault();
-            const val = item.getAttribute('data-value');
-            valueInput.value = val;
-            valueLabel.textContent = val;
-        });
+        if (anyCheck.checked) valueInput.disabled = true;
 
         // --- Remove row ------------------------------------------------------
 
@@ -191,43 +215,13 @@ const OsmModule = (() => {
         });
 
         container.appendChild(row);
-        return row;
-    }
 
-    async function loadValuesForKey(key, valueMenu) {
-        if (!key) return;
-
-        valueMenu.innerHTML =
-            '<li><span class="dropdown-item-text small text-muted">در حال بارگذاری مقادیر...</span></li>';
-
-        try {
-            const res = await fetch(
-                `http://127.0.0.1:8000/osm/tag-values?key=${encodeURIComponent(key)}`
-            );
-            if (!res.ok) throw new Error('bad status');
-            const data = await res.json();
-            const values = (data.values || []).slice(0, VALUE_LIMIT);
-
-            if (values.length === 0) {
-                valueMenu.innerHTML =
-                    '<li><span class="dropdown-item-text small text-muted">مقداری برای این کلید یافت نشد؛ مقدار دلخواه را در منوی کلید دلخواه تایپ کنید.</span></li>';
-                return;
-            }
-
-            valueMenu.innerHTML = values.map(v =>
-                `<li>
-                    <a class="dropdown-item d-flex justify-content-between align-items-center gap-2" href="#"
-                       data-value="${escapeAttr(v.value)}" dir="ltr">
-                        <span class="text-truncate">${escapeAttr(v.value)}</span>
-                        <span class="text-muted small text-nowrap">${formatCount(v.count)}</span>
-                    </a>
-                </li>`
-            ).join('');
-        } catch (e) {
-            valueMenu.innerHTML =
-                '<li><span class="dropdown-item-text small text-muted">خطا در بارگذاری مقادیر؛ مقدار دلخواه را تایپ کنید.</span></li>';
-            console.error('OSM tag-values error:', e);
+        // Prefill: load values for a pre-set key
+        if (key) {
+            keyInput.dispatchEvent(new Event('change'));
         }
+
+        return row;
     }
 
     /**

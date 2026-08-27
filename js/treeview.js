@@ -548,7 +548,26 @@
                         }
                         event.stopPropagation();
                     });
-                } else if (!this.options.nodeSelectionEnabled || !isNodeSelectable) {
+                } else if (this.options.nodeSelectionEnabled && this.options.checkboxSelectionEnabled && isNodeSelectable) {
+                    // With checkbox selection enabled, make the whole dataset
+                    // row clickable while keeping the checkbox as the control.
+                    nodeContentWrapper.addEventListener('click', (event) => {
+                        if (event.target.classList.contains('treeview-expander')
+                            || event.target.classList.contains('treeview-checkbox')) return;
+                        const checkbox = nodeContentWrapper.querySelector('.treeview-checkbox');
+                        if (checkbox) checkbox.click();
+                        event.stopPropagation();
+                    });
+                } else if (!isNodeSelectable) {
+                    // Category rows toggle their children when the label or
+                    // the dedicated +/- expander is clicked.
+                    nodeContentWrapper.addEventListener('click', (event) => {
+                        if (event.target.classList.contains('treeview-expander')) return;
+                        const expander = nodeContentWrapper.querySelector('.treeview-expander');
+                        if (expander) expander.click();
+                        event.stopPropagation();
+                    });
+                } else if (!this.options.nodeSelectionEnabled) {
                     // Change cursor if selection is disabled (globally) or if this specific node is not selectable
                     nodeContentWrapper.style.cursor = 'default';
                 }

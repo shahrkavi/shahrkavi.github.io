@@ -152,6 +152,12 @@ const ApiService = (() => {
                     return;
                 }
 
+                if (dataset === 'OVT') {
+                    // Overture Maps buildings search
+                    resolve(await searchOvertureBuildings(criteria));
+                    return;
+                }
+
                 // Supported dataset codes
                 const supportedCodes = ['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'S1', 'MOD', 'MYD', 'DEM'];
 
@@ -182,7 +188,7 @@ const ApiService = (() => {
                     params.set('regionGeometry', JSON.stringify(criteria.regionGeometry));
                 }
 
-                const response = await fetch(API_BASE + `landsat/search?${params}`);
+                const response = await fetch(`${API_BASE}/landsat/search?${params}`);
 
                 if (!response.ok) {
                     throw new Error(`Server error: ${response.status}`);
@@ -229,7 +235,7 @@ const ApiService = (() => {
                 let response;
                 try {
                     response = await fetch(
-                        `window.location.origin/osm/search-layers?${params}`,
+                        `${API_BASE}/osm/search-layers?${params}`,
                         { signal: controller.signal }
                     );
                 } finally {
@@ -302,7 +308,7 @@ const ApiService = (() => {
                 let response;
                 try {
                     response = await fetch(
-                        `window.location.origin/weather/search?${params}`,
+                        `${API_BASE}/weather/search?${params}`,
                         { signal: controller.signal }
                     );
                 } finally {
@@ -368,7 +374,7 @@ const ApiService = (() => {
                 let response;
                 try {
                     response = await fetch(
-                        `window.location.origin/landsat/dem?${params}`,
+                        `${API_BASE}/landsat/dem?${params}`,
                         { signal: controller.signal }
                     );
                 } finally {
@@ -416,6 +422,101 @@ const ApiService = (() => {
     }
 
     /**
+     * Search Overture Maps buildings inside the given region.
+     */
+    function searchOvertureBuildings(criteria) {
+        return new Promise(async (resolve) => {
+            try {
+                const params = new URLSearchParams({
+                    north: criteria.north,
+                    south: criteria.south,
+                    east: criteria.east,
+                    west: criteria.west,
+                    limit: 5000,
+                });
+
+                const controller = new AbortController();
+                // First (uncached) Overture query can take several minutes
+                const timeoutId = setTimeout(() => controller.abort(), 600000);
+                let response;
+                try {
+                    response = await fetch(
+                        `${API_BASE}/overture/buildings?${params}`,
+                        { signal: controller.signal }
+                    );
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+                if (!response.ok) {
+                    let detail = `Server error: ${response.status}`;
+                    try {
+                        const err = await response.json();
+                        if (err.detail) detail = err.detail;
+                    } catch (e) { /* ignore */ }
+                    throw new Error(detail);
+                }
+
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.message || 'خطا در جستجوی Overture Maps');
+                }
+
+                resolve({
+                    success: true,
+                    data: [],
+                    total: data.total || 0,
+                    message: data.message || 'ساختمانهای Overture Maps یافت شد',
+                    overture: {
+                        total: data.total || 0,
+                        count: data.count || 0,
+                        truncated: !!data.truncated,
+                        download_url: data.download_url || '',
+                    },
+                });
+            } catch (error) {
+                console.error('Overture search error:', error);
+                const message = error.name === 'AbortError'
+                    ? 'زمان جستجوی Overture Maps به پایان رسید'
+                    : error.message;
+                resolve({
+                    success: false,
+                    data: [],
+                    total: 0,
+                    message: 'خطا در جستجوی ساختمانهای Overture Maps: ' + message,
+                    overture: null,
+                });
+            }
+        });
+    }
+
+    /**
+     * Fetch distinct acquisition dates with imagery for region + dataset
+     * within the given date window (the months shown in the calendar).
+     */
+    function fetchAvailableDates(bounds, dataset, startIso, endIso) {
+        return new Promise(async (resolve) => {
+            try {
+                const params = new URLSearchParams({
+                    north: bounds.north,
+                    south: bounds.south,
+                    east: bounds.east,
+                    west: bounds.west,
+                    datasets: dataset,
+                    start: startIso,
+                    end: endIso,
+                });
+                const res = await fetch(`${API_BASE}/landsat/available-dates?${params}`);
+                if (!res.ok) throw new Error(`Server error: ${res.status}`);
+                const data = await res.json();
+                resolve(data.success ? (data.dates || []) : []);
+            } catch (error) {
+                console.error('available-dates error:', error);
+                resolve([]);
+            }
+        });
+    }
+
+    /**
      * Generate a download URL (mock)
      */
     function getDownloadUrl(sceneId) {
@@ -425,6 +526,7 @@ const ApiService = (() => {
     return {
         SATELLITES,
         search,
+        fetchAvailableDates,
         getDownloadUrl,
     };
 })();

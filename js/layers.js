@@ -7,16 +7,6 @@ const LayersModule = (() => {
     // Layer definitions with state
     const DEFAULT_LAYERS = [
         {
-            id: 'layer-boundaries',
-            name: 'مرزهای ایران',
-            icon: 'bi-map',
-            type: 'overlay',
-            visible: true,
-            opacity: 0.7,
-            layer: null,
-            source: null,
-        },
-        {
             id: 'layer-labels',
             name: 'برچسب شهرها',
             icon: 'bi-pin-map',
@@ -61,16 +51,6 @@ const LayersModule = (() => {
     }
 
     function createSampleLayers() {
-        // Iran boundary - simple rectangle approximation
-        const iranBounds = L.rectangle([[25.0, 44.0], [39.8, 63.3]], {
-            color: '#e74c3c',
-            weight: 2,
-            fill: false,
-            dashArray: '5, 5',
-        });
-        layers[0].layer = iranBounds;
-        layers[0].source = 'custom';
-
         // City labels - sample points layer
         const cityMarkers = L.layerGroup([
             L.marker([35.6892, 51.3890], { title: 'تهران' }).bindPopup('تهران'),
@@ -79,8 +59,8 @@ const LayersModule = (() => {
             L.marker([29.5926, 52.5836], { title: 'شیراز' }).bindPopup('شیراز'),
             L.marker([38.0666, 46.2995], { title: 'تبریز' }).bindPopup('تبریز'),
         ]);
-        layers[1].layer = cityMarkers;
-        layers[1].source = 'custom';
+        layers[0].layer = cityMarkers;
+        layers[0].source = 'custom';
     }
 
     /**

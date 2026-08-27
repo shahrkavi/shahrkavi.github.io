@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>شهرکاوی - وضعیت پردازش</title>
+
+    <!-- Vazirmatn Font -->
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+
+    <!-- Bootstrap 5.3 RTL -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="css/style.css" rel="stylesheet">
+
+    <style>
+        body {
+            background: #f4f6f9;
+            font-family: 'Vazirmatn', sans-serif;
+        }
+        .job-card {
+            max-width: 720px;
+            margin: 48px auto;
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        }
+        .job-status-icon {
+            font-size: 3rem;
+        }
+        .progress {
+            height: 10px;
+        }
+        .preview-img {
+            max-height: 360px;
+            object-fit: contain;
+            width: 100%;
+            background: #0b1220;
+            border-radius: 10px;
+        }
+        .job-meta dt { color: #6c757d; font-weight: 400; font-size: 0.85rem; }
+        .job-meta dd { font-weight: 600; margin-bottom: 0.4rem; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="container-fluid d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+                <img src="assets/logo.png" alt="شهرکاوی" class="app-logo" onerror="this.style.display='none'">
+                <div>
+                    <h1 class="app-title">شهرکاوی</h1>
+                    <p class="app-subtitle">وضعیت پردازش درخواست</p>
+                </div>
+            </div>
+            <a class="btn btn-outline-light btn-sm" href="index.html">
+                <i class="bi bi-arrow-right"></i>
+                <span class="d-none d-md-inline me-1">بازگشت به برنامه</span>
+            </a>
+        </div>
+    </header>
+
+    <div class="container">
+
+        <!-- Job status card -->
+        <div class="card job-card" id="jobCard">
+            <div class="card-body p-4 p-md-5">
+
+                <!-- Loading / unknown state -->
+                <div id="jobLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3 text-muted">در حال دریافت وضعیت...</p>
+                </div>
+
+                <!-- Job not found -->
+                <div id="jobNotFound" class="text-center py-4 d-none">
+                    <i class="bi bi-search text-muted job-status-icon"></i>
+                    <h5 class="mt-3">کار پردازش یافت نشد</h5>
+                    <p class="text-muted">این کار پردازش وجود ندارد یا منقضی شده است.</p>
+                    <a href="index.html" class="btn btn-primary mt-2">
+                        <i class="bi bi-arrow-right"></i> بازگشت به برنامه
+                    </a>
+                </div>
+
+                <!-- Job info + live status -->
+                <div id="jobBody" class="d-none">
+                    <div class="text-center mb-4" id="jobStatusArea">
+                        <i class="bi bi-hourglass-split text-warning job-status-icon" id="statusIcon"></i>
+                        <h4 class="mt-2 mb-1" id="jobStatusTitle">در صف پردازش</h4>
+                        <p class="text-muted mb-1" id="jobStatusMessage">در انتظار شروع پردازش...</p>
+                        <div class="progress mt-3 mx-auto" style="max-width: 420px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" id="jobProgressBar"
+                                 role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <small class="text-muted" id="jobProgressText">۰٪</small>
+                    </div>
+
+                    <dl class="row job-meta mb-4">
+                        <dt class="col-4 col-md-3">شناسه کار</dt>
+                        <dd class="col-8 col-md-9" id="jobIdLabel">--</dd>
+                        <dt class="col-4 col-md-3">دیتاست</dt>
+                        <dd class="col-8 col-md-9" id="jobDatasetLabel">--</dd>
+                        <dt class="col-4 col-md-3">نوع پردازش</dt>
+                        <dd class="col-8 col-md-9" id="jobProcessLabel">--</dd>
+                        <dt class="col-4 col-md-3" id="jobSceneCountTitle">تعداد صحنه</dt>
+                        <dd class="col-8 col-md-9" id="jobSceneCountLabel">--</dd>
+                        <dt class="col-4 col-md-3">زمان ثبت</dt>
+                        <dd class="col-8 col-md-9" id="jobCreatedLabel">--</dd>
+                    </dl>
+
+                    <!-- Success state -->
+                    <div id="jobSuccess" class="d-none">
+                        <div class="text-center mb-3">
+                            <i class="bi bi-check-circle-fill text-success job-status-icon"></i>
+                            <h5 class="mt-2">پردازش با موفقیت انجام شد</h5>
+                        </div>
+                        <div id="jobPreviewContainer" class="text-center mb-3 d-none">
+                            <img id="jobPreviewImg" class="preview-img border" alt="پیش‌نمایش نتیجه">
+                        </div>
+                        <div class="d-grid gap-2">
+                            <a class="btn btn-primary btn-lg" id="btnJobDownload" href="#" download>
+                                <i class="bi bi-download"></i> دانلود تصویر پردازش‌شده
+                            </a>
+                            <a class="btn btn-outline-secondary" href="index.html">
+                                <i class="bi bi-arrow-right"></i> بازگشت به برنامه
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Failed state -->
+                    <div id="jobFailed" class="d-none">
+                        <div class="text-center mb-3">
+                            <i class="bi bi-x-circle-fill text-danger job-status-icon"></i>
+                            <h5 class="mt-2">پردازش ناموفق بود</h5>
+                        </div>
+                        <div class="alert alert-danger" id="jobErrorText"></div>
+                        <div class="d-grid gap-2">
+                            <a class="btn btn-outline-secondary" href="index.html">
+                                <i class="bi bi-arrow-right"></i> بازگشت به برنامه
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Recent jobs -->
+        <div class="card job-card" id="recentJobsCard">
+            <div class="card-body p-4">
+                <h6 class="section-title">
+                    <i class="bi bi-clock-history"></i> کارهای پردازش اخیر
+                </h6>
+                <div id="recentJobsList">
+                    <div class="text-muted small">در حال بارگذاری...</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- API base URL config -->
+    <script src="js/config.js"></script>
+
+    <!-- Job status script -->
+    <script src="js/processing.js"></script>
+
+</body>
+</html>

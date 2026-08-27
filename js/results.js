@@ -8,7 +8,6 @@ const ResultsModule = (() => {
     let currentPage = 1;
     let currentResults = [];
     let allResults = [];
-let selectedDate = 'all';
 
     function init() {
         // Listen for search completion
@@ -17,62 +16,11 @@ let selectedDate = 'all';
         // Cart updates
         EventBus.on('cart:updated', onCartUpdated);
 
-        // Add all to cart button
-        const btnAddAll = document.getElementById('btnAddAllToCart');
-        if (btnAddAll) {
-            btnAddAll.addEventListener('click', () => {
-                if (currentResults.length > 0) {
-                    currentResults.forEach(item => {
-                        if (!AppState.cart.includes(item.id)) {
-                            AppState.cart.push(item.id);
-                        }
-                    });
-                    updateCartUI();
-                    EventBus.emit('cart:updated', AppState.cart);
-                    showToast(`${toPersianNum(currentResults.length)} تصویر به سبد اضافه شد`, 'success');
-                }
-            });
-        }
-
-        const btnSelectAll = document.getElementById('btnSelectAllResults');
-        if (btnSelectAll) {
-            btnSelectAll.addEventListener('click', () => {
-                const currentIds = currentResults.map(item => item.id);
-                const selected = new Set(AppState.selectedScenes || []);
-                const allSelected = currentIds.length > 0 && currentIds.every(id => selected.has(id));
-
-                currentIds.forEach(id => {
-                    if (allSelected) selected.delete(id);
-                    else selected.add(id);
-                });
-
-                updateSelection([...selected]);
-                renderResults();
-            });
-        }
-
-        // Export button (placeholder)
-        const btnExport = document.getElementById('btnExportResults');
-        if (btnExport) {
-            btnExport.addEventListener('click', () => {
-                showToast('خروجی CSV آماده دانلود است', 'info');
-            });
-        }
-
         // Cart button click - download all cart items as a ZIP file
         const btnCart = document.getElementById('btnCart');
         if (btnCart) {
             btnCart.addEventListener('click', () => {
-                downloadCart();
-            });
-        }
-
-        const dateFilter = document.getElementById('resultDateFilter');
-        if (dateFilter) {
-            dateFilter.addEventListener('change', () => {
-                selectedDate = dateFilter.value;
-                AppState.selectedResultDate = selectedDate;
-                applyResultFilters();
+                withButtonLoading(btnCart, downloadCart, 'در حال آماده‌سازی...');
             });
         }
 
@@ -100,9 +48,18 @@ let selectedDate = 'all';
         return (AppState.searchCriteria.dataset || '') === 'DEM';
     }
 
+    function isOvtMode() {
+        return (AppState.searchCriteria.dataset || '') === 'OVT';
+    }
+
     function onCompleted(response) {
         allResults = Array.isArray(response.data) ? response.data : [];
         const total = response.total || allResults.length;
+
+        if (isOvtMode()) {
+            renderOvtResults();
+            return;
+        }
 
         if (isWeatherMode()) {
             currentResults = [];
@@ -138,13 +95,15 @@ let selectedDate = 'all';
             return;
         }
 
-        const dates = getAvailableDates();
-        selectedDate = dates[0] || 'all';
-        currentResults = selectedDate === 'all' ? allResults.slice() : allResults.filter(item => item.date === selectedDate);
-        AppState.selectedResultDate = selectedDate;
+        // Show all results, newest first (no date grouping)
+        allResults.sort((a, b) => new Date(b.date) - new Date(a.date));
+        currentResults = allResults.slice();
         currentPage = 1;
+        // Nothing is selected by default; the user picks images explicitly
         AppState.processSelectionInitialized = false;
-        updateSelection(currentResults.map(item => item.id));
+        AppState.selectedScenes = [];
+        AppState.selectedScene = null;
+        updateSelectionSummary();
         renderResults();
     }
 
@@ -177,25 +136,18 @@ let selectedDate = 'all';
             return;
         }
 
-        renderDateFilter();
         renderCloudAverage();
 
         // Restore scene-oriented controls
         const dateFilterRow = document.getElementById('dateFilterRow');
         const osmSummary = document.getElementById('osmResultsSummary');
         const btnGoProcess = document.getElementById('btnGoProcess');
-        const btnAddAll = document.getElementById('btnAddAllToCart');
-        const btnSelectAll = document.getElementById('btnSelectAllResults');
-        const btnExport = document.getElementById('btnExportResults');
         if (dateFilterRow) dateFilterRow.classList.remove('d-none');
         if (osmSummary) osmSummary.classList.add('d-none');
         if (btnGoProcess) {
             btnGoProcess.style.display = '';
             btnGoProcess.innerHTML = '<i class="bi bi-gear"></i> پردازش تصویر';
         }
-        if (btnAddAll) btnAddAll.style.display = '';
-        if (btnSelectAll) btnSelectAll.style.display = '';
-        if (btnExport) btnExport.style.display = '';
         restoreSceneTableHeader();
 
         // Update count
@@ -211,19 +163,6 @@ let selectedDate = 'all';
             badge.style.display = currentResults.length > 0 ? 'inline' : 'none';
         }
 
-        // Toggle action buttons
-        const hasResults = currentResults.length > 0;
-        if (btnAddAll) btnAddAll.disabled = !hasResults;
-        if (btnSelectAll) {
-            btnSelectAll.disabled = !hasResults;
-            const selected = new Set(AppState.selectedScenes || []);
-            const allSelected = hasResults && currentResults.every(item => selected.has(item.id));
-            btnSelectAll.innerHTML = allSelected
-                ? '<i class="bi bi-square"></i> لغو انتخاب همه'
-                : '<i class="bi bi-check2-square"></i> انتخاب همه';
-        }
-        if (btnExport) btnExport.disabled = !hasResults;
-
         // Render table
         const startIdx = (currentPage - 1) * RESULTS_PER_PAGE;
         const endIdx = startIdx + RESULTS_PER_PAGE;
@@ -235,33 +174,6 @@ let selectedDate = 'all';
 
         // Show footprints on map
         showFootprintsOnMap(pageItems);
-    }
-
-function getAvailableDates() {
-        return [...new Set(allResults.map(item => item.date).filter(Boolean))].sort().reverse();
-    }
-
-    function renderDateFilter() {
-        const dateFilter = document.getElementById('resultDateFilter');
-        if (!dateFilter) return;
-
-        const dates = getAvailableDates();
-        dateFilter.innerHTML = dates.map(date => {
-            const count = allResults.filter(item => item.date === date).length;
-            return `<option value="${date}">${toPersianDate(date)} (${toPersianNum(count)} تصویر)</option>`;
-        }).join('');
-
-        if (!dates.includes(selectedDate)) {
-            selectedDate = dates[0] || 'all';
-        }
-        dateFilter.value = selectedDate;
-    }
-
-function applyResultFilters() {
-        currentResults = allResults.filter(item => item.date === selectedDate);
-        currentPage = 1;
-        updateSelection(currentResults.map(item => item.id));
-        renderResults();
     }
 
     function renderCloudAverage() {
@@ -285,6 +197,7 @@ function applyResultFilters() {
 
     function renderOsmResults() {
         MapModule.clearUserLayers();
+        MapModule.hideGeoJsonOverlay();
 
         const osm = AppState.osmInfo || {};
         const layers = Array.isArray(osm.layers) ? osm.layers : [];
@@ -307,16 +220,10 @@ function applyResultFilters() {
         // button and the selection counter are kept for OSM layers.
         const dateFilterRow = document.getElementById('dateFilterRow');
         const osmSummary = document.getElementById('osmResultsSummary');
-        const btnAddAll = document.getElementById('btnAddAllToCart');
-        const btnSelectAll = document.getElementById('btnSelectAllResults');
-        const btnExport = document.getElementById('btnExportResults');
         const btnGoProcess = document.getElementById('btnGoProcess');
         const selectionCount = document.getElementById('resultsSelectionCount');
         if (dateFilterRow) dateFilterRow.classList.add('d-none');
         if (osmSummary) osmSummary.classList.remove('d-none');
-        if (btnAddAll) btnAddAll.style.display = 'none';
-        if (btnSelectAll) btnSelectAll.style.display = 'none';
-        if (btnExport) btnExport.style.display = 'none';
         if (btnGoProcess) {
             btnGoProcess.style.display = '';
             btnGoProcess.innerHTML = '<i class="bi bi-layers"></i> پردازش لایه‌ها';
@@ -332,23 +239,6 @@ function applyResultFilters() {
         if (note) {
             note.innerHTML = `عبارت جستجو: ${filters || '—'} | تعداد کل: ${toPersianNum(totalCount)} عنصر` +
                 (osm.truncated ? '<br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> نتایج بیش از حد مجاز است؛ فقط بخشی نمایش داده می‌شود. برای دریافت کامل از دکمه دانلود استفاده کنید.</span>' : '');
-        }
-        const dl = document.getElementById('btnOsmDownload');
-        if (dl) {
-            const needsProcess = totalCount > OSM_DOWNLOAD_LIMIT || osm.downloadable === false;
-            if (osm.download_url && !needsProcess) {
-                dl.href = osm.download_url;
-                dl.classList.remove('disabled');
-                dl.setAttribute('aria-disabled', 'false');
-                dl.innerHTML = '<i class="bi bi-download"></i> دانلود داده‌های OSM (GeoJSON)';
-                dl.onclick = null;
-            } else {
-                dl.removeAttribute('href');
-                dl.classList.add('disabled');
-                dl.setAttribute('aria-disabled', 'true');
-                dl.innerHTML = '<i class="bi bi-gear"></i> نیازمند پردازش';
-                dl.onclick = (e) => e.preventDefault();
-            }
         }
 
         setOsmTableHeader();
@@ -371,6 +261,7 @@ function applyResultFilters() {
                 <th>نام لایه</th>
                 <th>تعداد</th>
                 <th>دانلود</th>
+                <th class="text-center">پیش‌نمایش</th>
             </tr>
         `;
     }
@@ -384,13 +275,9 @@ function applyResultFilters() {
                     <input class="form-check-input" type="checkbox" id="resultSelectPage"
                            title="انتخاب تصاویر این صفحه">
                 </th>
-                <th class="col-thumb">پیش‌نمایش</th>
-                <th>شناسه</th>
+                <th>شناسه تصویر</th>
                 <th>تاریخ</th>
-                <th>ماهواره</th>
-                <th>مسیر / ردیف</th>
-                <th>پوشش منطقه</th>
-                <th>پوشش ابر</th>
+                <th>ابر / پوشش</th>
                 <th>عملیات</th>
             </tr>
         `;
@@ -424,7 +311,7 @@ function applyResultFilters() {
                 ? (needsProcess
                     ? `<button type="button" class="btn btn-sm btn-outline-secondary" disabled
                             title="تعداد عناصر بیش از حد مجاز برای دانلود مستقیم؛ از پردازش استفاده کنید">
-                            <i class="bi bi-gear"></i> نیازمند پردازش
+                            <i class="bi bi-gear"></i> پردازش
                         </button>`
                     : `<a href="${escapeHtml(dlUrl)}" download class="btn btn-sm btn-outline-primary">
                            <i class="bi bi-download"></i> دانلود
@@ -458,9 +345,24 @@ function applyResultFilters() {
                             : '<span class="text-muted small">—</span>'}                    
                     </td>
                     <td>${dlBtn}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary btn-action btn-osm-preview"
+                                data-layer="${escapeHtml(layer.name)}" title="پیش‌نمایش لایه روی نقشه">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </td>
                 </tr>
             `;
         }).join('');
+
+        // Preview buttons: one layer preview on the map at a time
+        tbody.querySelectorAll('.btn-osm-preview').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleOsmLayerPreview(btn);
+            });
+        });
+        syncOsmPreviewButtons();
 
         // Row checkboxes drive the layer selection
         tbody.querySelectorAll('.osm-layer-checkbox').forEach(checkbox => {
@@ -486,6 +388,219 @@ function applyResultFilters() {
         });
 
         syncOsmSelectAll(layers);
+    }
+
+    /**
+     * Toggle a single OSM layer feature preview on the map. Fetches the
+     * layer's GeoJSON (capped by the server) and draws it; only one layer
+     * preview is visible at a time.
+     */
+    async function toggleOsmLayerPreview(btn) {
+        const name = btn.dataset.layer;
+        const layers = (AppState.osmInfo && AppState.osmInfo.layers) || [];
+        const layer = layers.find(l => l.name === name);
+
+        // Clicking the active layer's button removes its preview
+        if (MapModule.getActiveGeoJsonId() === name) {
+            MapModule.hideGeoJsonOverlay();
+            syncOsmPreviewButtons();
+            return;
+        }
+
+        if (!layer || !layer.download_url) {
+            showToast('آدرس پیش‌نمایش این لایه در دسترس نیست', 'warning');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+            const url = layer.download_url.startsWith('/')
+                ? API_BASE + layer.download_url
+                : layer.download_url;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const geojson = await res.json();
+            if (!geojson.features || geojson.features.length === 0) {
+                showToast('عنصری برای پیش‌نمایش این لایه یافت نشد', 'info');
+                return;
+            }
+            // Replaces any previously shown preview -> only one at a time
+            MapModule.showGeoJsonOverlay(name, geojson);
+        } catch (error) {
+            console.error('OSM preview error:', error);
+            showToast('خطا در دریافت پیش‌نمایش لایه', 'error');
+        } finally {
+            btn.disabled = false;
+            syncOsmPreviewButtons();
+        }
+    }
+
+    /** Reflect which layer (if any) is currently previewed on the buttons */
+    function syncOsmPreviewButtons() {
+        const activeId = MapModule.getActiveGeoJsonId();
+        document.querySelectorAll('#resultsTableBody .btn-osm-preview').forEach(btn => {
+            const active = btn.dataset.layer === activeId;
+            btn.classList.toggle('btn-primary', active);
+            btn.classList.toggle('btn-outline-primary', !active);
+            btn.title = active ? 'حذف پیش‌نمایش از نقشه' : 'پیش‌نمایش لایه روی نقشه';
+            btn.innerHTML = active ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+        });
+    }
+
+    // === Overture Maps buildings results rendering ===
+
+    const OVT_TABLE_ROW_LIMIT = 200;
+    let ovtPreviewAbort = null;
+
+    function ovtParams(limit) {
+        const c = AppState.searchCriteria;
+        return new URLSearchParams({
+            north: c.north, south: c.south, east: c.east, west: c.west,
+            limit: limit || 5000,
+        });
+    }
+
+    function renderOvtResults() {
+        MapModule.clearUserLayers();
+        MapModule.clearImageOverlays();
+        MapModule.hideGeoJsonOverlay();
+
+        const ovt = AppState.overtureInfo || {};
+        const totalCount = Number.isFinite(ovt.total) ? ovt.total : 0;
+
+        // Count + badge
+        const countEl = document.getElementById('resultsCount');
+        if (countEl) countEl.textContent = `${toPersianNum(totalCount)} ساختمان یافت شد`;
+        const badge = document.getElementById('resultsBadge');
+        if (badge) {
+            badge.textContent = toPersianNum(totalCount);
+            badge.style.display = totalCount > 0 ? 'inline' : 'none';
+        }
+
+        // Toggle header controls
+        const dateFilterRow = document.getElementById('dateFilterRow');
+        const osmSummary = document.getElementById('osmResultsSummary');
+        const ovtSummary = document.getElementById('ovtResultsSummary');
+        const selectionCount = document.getElementById('resultsSelectionCount');
+        if (dateFilterRow) dateFilterRow.classList.add('d-none');
+        if (osmSummary) osmSummary.classList.add('d-none');
+        if (ovtSummary) ovtSummary.classList.remove('d-none');
+        if (selectionCount) selectionCount.style.display = 'none';
+
+        const btnGoProcess = document.getElementById('btnGoProcess');
+        if (btnGoProcess) {
+            btnGoProcess.disabled = false;
+            btnGoProcess.innerHTML = '<i class="bi bi-gear"></i> تبدیل و دانلود';
+        }
+        AppState.selectedScenes = [];
+
+        // Summary note + download link
+        const note = document.getElementById('ovtResultsNote');
+        if (note) {
+            note.innerHTML =
+                `منبع: Overture Maps ساختمانها | تعداد کل: ${toPersianNum(totalCount)} ساختمان` +
+                (ovt.truncated
+                    ? '<br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> نتایج بیش از حد مجاز است؛ فقط بخشی نمایش داده می‌شود. برای دریافت کامل از دکمه دانلود استفاده کنید.</span>'
+                    : '');
+        }
+        const dl = document.getElementById('btnOvtDownloadGeojson');
+        if (dl) {
+            dl.onclick = (e) => {
+                e.preventDefault();
+                withButtonLoading(dl, () =>
+                    fetchAndDownload(`${API_BASE}/overture/buildings/download?${ovtParams(50000)}`, 'overture_buildings.geojson'),
+                    'در حال دانلود...'
+                );
+            };
+        }
+        const btnPreview = document.getElementById('btnOvtPreview');
+        if (btnPreview) {
+            btnPreview.onclick = () => previewOvtBuildings(btnPreview);
+        }
+
+        setOvtTableHeader();
+        renderOvtTable([]);
+
+        // Layer table is a compact summary - no pagination
+        const paginationNav = document.getElementById('resultsPagination');
+        if (paginationNav) paginationNav.style.display = 'none';
+    }
+
+    /** Fetch buildings GeoJSON, draw them on the map and fill the table */
+    async function previewOvtBuildings(btn) {
+        if (ovtPreviewAbort) ovtPreviewAbort.abort();
+        ovtPreviewAbort = new AbortController();
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> در حال دریافت...';
+        try {
+            const res = await fetch(`${API_BASE}/overture/buildings/geojson?${ovtParams(5000)}`,
+                { signal: ovtPreviewAbort.signal });
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            const fc = await res.json();
+            const features = Array.isArray(fc.features) ? fc.features : [];
+            if (features.length === 0) {
+                showToast('ساختمانی برای نمایش یافت نشد', 'info');
+                return;
+            }
+            MapModule.showGeoJsonOverlay('ovt-buildings', fc);
+            AppState.searchResults = features;   // keep for potential reuse
+            renderOvtTable(features.slice(0, OVT_TABLE_ROW_LIMIT));
+            showToast(`${toPersianNum(features.length)} ساختمان روی نقشه نمایش داده شد`, 'success');
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.error('Overture preview error:', error);
+                showToast('خطا در دریافت ساختمانهای Overture', 'error');
+            }
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-map"></i> نمایش روی نقشه';
+        }
+    }
+
+    function setOvtTableHeader() {
+        const thead = document.querySelector('#resultsTable thead');
+        if (!thead) return;
+        thead.innerHTML = `
+            <tr>
+                <th>#</th>
+                <th>نام</th>
+                <th>کلاس</th>
+                <th>ارتفاع (متر)</th>
+                <th>طبقات</th>
+            </tr>
+        `;
+    }
+
+    function renderOvtTable(features) {
+        const tbody = document.getElementById('resultsTableBody');
+        if (!tbody) return;
+
+        if (!features || features.length === 0) {
+            tbody.innerHTML = `
+                <tr class="results-empty">
+                    <td colspan="5" class="text-center text-muted py-4">
+                        <i class="bi bi-map" style="font-size:2rem"></i>
+                        <p class="mt-2">برای مشاهده فهرست ساختمانها، دکمه «نمایش روی نقشه» را بزنید</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = features.map((f, i) => {
+            const p = f.properties || {};
+            return `
+                <tr>
+                    <td>${toPersianNum(i + 1)}</td>
+                    <td>${p.name ? escapeHtml(p.name) : '<span class="text-muted">—</span>'}</td>
+                    <td dir="ltr">${p.class ? escapeHtml(p.class) : '<span class="text-muted">—</span>'}</td>
+                    <td>${Number.isFinite(p.height) ? toPersianNum(Math.round(p.height)) : '<span class="text-muted">—</span>'}</td>
+                    <td>${Number.isFinite(p.num_floors) ? toPersianNum(p.num_floors) : '<span class="text-muted">—</span>'}</td>
+                </tr>
+            `;
+        }).join('');
     }
 
     function updateOsmLayerSelection(names) {
@@ -559,16 +674,10 @@ function applyResultFilters() {
         // Hide scene-oriented controls; the process step does not apply here.
         const dateFilterRow = document.getElementById('dateFilterRow');
         const osmSummary = document.getElementById('osmResultsSummary');
-        const btnAddAll = document.getElementById('btnAddAllToCart');
-        const btnSelectAll = document.getElementById('btnSelectAllResults');
-        const btnExport = document.getElementById('btnExportResults');
         const btnGoProcess = document.getElementById('btnGoProcess');
         const selectionCount = document.getElementById('resultsSelectionCount');
         if (dateFilterRow) dateFilterRow.classList.add('d-none');
         if (osmSummary) osmSummary.classList.add('d-none');
-        if (btnAddAll) btnAddAll.style.display = 'none';
-        if (btnSelectAll) btnSelectAll.style.display = 'none';
-        if (btnExport) btnExport.style.display = 'none';
         if (btnGoProcess) btnGoProcess.style.display = 'none';
         if (selectionCount) selectionCount.style.display = 'none';
 
@@ -612,16 +721,10 @@ function applyResultFilters() {
         // Hide scene-oriented controls
         const dateFilterRow = document.getElementById('dateFilterRow');
         const osmSummary = document.getElementById('osmResultsSummary');
-        const btnAddAll = document.getElementById('btnAddAllToCart');
-        const btnSelectAll = document.getElementById('btnSelectAllResults');
-        const btnExport = document.getElementById('btnExportResults');
         const btnGoProcess = document.getElementById('btnGoProcess');
         const selectionCount = document.getElementById('resultsSelectionCount');
         if (dateFilterRow) dateFilterRow.classList.add('d-none');
         if (osmSummary) osmSummary.classList.add('d-none');
-        if (btnAddAll) btnAddAll.style.display = 'none';
-        if (btnSelectAll) btnSelectAll.style.display = 'none';
-        if (btnExport) btnExport.style.display = 'none';
         if (btnGoProcess) {
             btnGoProcess.style.display = '';
             btnGoProcess.innerHTML = '<i class="bi bi-gear"></i> پردازش DEM';
@@ -632,18 +735,24 @@ function applyResultFilters() {
         setDemTableHeader();
         renderDemTable(tiles);
 
-        // Show tile footprints on map
+        // Show tile footprints on map (normalized so selection highlight works)
+        const mappedTiles = [];
         tiles.forEach(tile => {
             if (tile.bbox && tile.bbox.length >= 4) {
                 const [w, s, e, n] = tile.bbox;
-                MapModule.showFootprint([
-                    { lat: n, lng: w },
-                    { lat: n, lng: e },
-                    { lat: s, lng: e },
-                    { lat: s, lng: w },
-                ], '#2ecc71');
+                mappedTiles.push({
+                    id: tile.id,
+                    footprint: [
+                        { lat: n, lng: w },
+                        { lat: n, lng: e },
+                        { lat: s, lng: e },
+                        { lat: s, lng: w },
+                    ],
+                    baseColor: '#2ecc71',
+                });
             }
         });
+        showFootprintsOnMap(mappedTiles);
 
         const paginationNav = document.getElementById('resultsPagination');
         if (paginationNav) paginationNav.style.display = 'none';
@@ -658,9 +767,8 @@ function applyResultFilters() {
                     <input class="form-check-input" type="checkbox" id="demSelectAll"
                            title="انتخاب همه کاشیها">
                 </th>
-                <th>شناسه کاشی</th>
-                <th>پوشش منطقه</th>
-                <th>محدوده</th>
+                <th>کاشی DEM</th>
+                <th>پوشش</th>
                 <th>عملیات</th>
             </tr>
         `;
@@ -673,7 +781,7 @@ function applyResultFilters() {
         if (tiles.length === 0) {
             tbody.innerHTML = `
                 <tr class="results-empty">
-                    <td colspan="5" class="text-center text-muted py-4">
+                    <td colspan="4" class="text-center text-muted py-4">
                         <i class="bi bi-inbox" style="font-size:2rem"></i>
                         <p class="mt-2">کاشی DEMای در این محدوده یافت نشد</p>
                         <small>محدوده جغرافیایی را بررسی کنید</small>
@@ -689,8 +797,9 @@ function applyResultFilters() {
             const inCart = AppState.cart.includes(tile.id);
             const isSelected = selected.has(tile.id);
             const bbox = tile.bbox || [];
+            const hasPreview = !!tile.tilejson;
             const bboxStr = bbox.length >= 4
-                ? `${toPersianNum(bbox[1].toFixed(1))}–${toPersianNum(bbox[3].toFixed(1))}°`
+                ? `${toPersianNum(bbox[0].toFixed(2))}–${toPersianNum(bbox[2].toFixed(2))}°E, ${toPersianNum(bbox[1].toFixed(2))}–${toPersianNum(bbox[3].toFixed(2))}°N`
                 : '—';
 
             return `
@@ -700,25 +809,26 @@ function applyResultFilters() {
                                value="${escapeHtml(tile.id)}" aria-label="انتخاب ${escapeHtml(tile.id)}"
                                ${isSelected ? 'checked' : ''}>
                     </td>
-                    <td>
-                        <span class="fw-medium" dir="ltr">${escapeHtml(tile.name || tile.id)}</span>
-                        <br><small class="text-muted">Copernicus DEM GLO-30</small>
+                    <td class="scene-cell">
+                        <span class="fw-medium d-block text-truncate scene-id-text" dir="ltr" title="${escapeHtml(tile.id)}">${escapeHtml(tile.name || tile.id)}</span>
+                        <small class="text-muted d-block" dir="ltr">Copernicus GLO-30</small>
                     </td>
-                    <td class="text-nowrap">${toPersianNum(Number(tile.coverage || 0).toFixed(1))}٪</td>
-                    <td class="text-nowrap text-muted small">${bboxStr}</td>
+                    <td class="text-nowrap text-muted small">
+                        ${toPersianNum(Number(tile.coverage || 0).toFixed(1))}٪
+                    </td>
                     <td>
                         <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-primary btn-action btn-preview"
+                                    data-id="${escapeHtml(tile.id)}" title="نمایش سایه‌روشن (Hillshade) روی نقشه"
+                                    ${hasPreview ? '' : 'disabled'}>
+                                <i class="bi bi-map"></i>
+                            </button>
                             <a href="${escapeHtml(tile.download_url || '#')}"
                                download="${escapeHtml(tile.filename || 'dem.tif')}"
-                               class="btn btn-sm btn-outline-primary btn-action"
+                               class="btn btn-sm btn-outline-secondary btn-action"
                                title="دانلود">
                                 <i class="bi bi-download"></i>
                             </a>
-                            <button class="btn btn-sm btn-outline-success btn-action btn-add-cart"
-                                    data-id="${escapeHtml(tile.id)}" title="افزودن به سبد"
-                                    ${inCart ? 'disabled' : ''}>
-                                <i class="bi bi-cart-plus"></i>
-                            </button>
                         </div>
                     </td>
                 </tr>
@@ -728,6 +838,9 @@ function applyResultFilters() {
         // Attach event listeners
         tbody.querySelectorAll('.btn-add-cart').forEach(btn => {
             btn.addEventListener('click', () => addToCart(btn.dataset.id));
+        });
+        tbody.querySelectorAll('.btn-preview:not([disabled])').forEach(btn => {
+            btn.addEventListener('click', () => withButtonLoading(btn, () => toggleScenePreview(btn, btn.dataset.id), 'در حال دریافت...'));
         });
         tbody.querySelectorAll('.result-scene-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', () => {
@@ -860,7 +973,7 @@ function applyResultFilters() {
         if (items.length === 0) {
             tbody.innerHTML = `
                 <tr class="results-empty">
-                    <td colspan="9" class="text-center text-muted py-4">
+                    <td colspan="5" class="text-center text-muted py-4">
                         <i class="bi bi-inbox" style="font-size:2rem"></i>
                         <p class="mt-2">تصویری با فیلتر فعلی یافت نشد</p>
                         <small>محدوده، تاریخ یا پوشش ابر را بررسی کنید</small>
@@ -876,13 +989,7 @@ function applyResultFilters() {
             const isSelected = AppState.selectedScenes.includes(item.id);
             const cloudClass = `cloud-${item.cloudCategory}`;
             const cloudLabel = `${toPersianNum(item.cloudCover)}٪`;
-            const thumbnail = item.thumbnail
-                ? `<img class="result-thumb" src="${item.thumbnail}" alt="پیش‌نمایش ${item.id}" loading="lazy"
-                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                   <span class="result-thumb result-thumb-placeholder" style="display:none">
-                       <i class="bi bi-image"></i>
-                   </span>`
-                : `<span class="result-thumb result-thumb-placeholder"><i class="bi bi-image"></i></span>`;
+            const hasPreview = !!((item.thumbnail || item.tilejson) && item.footprint);
 
             return `
                 <tr data-scene-id="${item.id}" class="${isSelected ? 'scene-selected' : ''}">
@@ -891,20 +998,25 @@ function applyResultFilters() {
                                value="${item.id}" aria-label="انتخاب ${item.id}"
                                ${isSelected ? 'checked' : ''}>
                     </td>
-                    <td class="col-thumb">${thumbnail}</td>
-                    <td>
-                        <span class="fw-medium">${item.id}</span>
-                        <br><small class="text-muted">${item.fullName}</small>
+                    <td class="scene-cell">
+                        <span class="fw-medium d-block text-truncate scene-id-text" dir="ltr" title="${item.id}">${item.id}</span>
+                        <small class="text-muted d-block text-truncate">${item.fullName}</small>
                     </td>
-                    <td>${toPersianDate(item.date)}</td>
-                    <td>${item.satellite}</td>
-                    <td class="text-nowrap">${toPersianNum(item.path)} / ${toPersianNum(item.row)}</td>
-                    <td class="text-nowrap">${toPersianNum(Number(item.coveragePercent ?? 0).toFixed(1))}٪</td>
-                    <td>
+                    <td class="text-nowrap">
+                        ${toPersianDate(item.date)}
+                        <small class="text-muted d-block" dir="ltr">P/R: ${toPersianNum(item.path)}/${toPersianNum(item.row)}</small>
+                    </td>
+                    <td class="text-nowrap">
                         <span class="result-cloud-badge ${cloudClass}">${cloudLabel}</span>
+                        <small class="text-muted d-block">${toPersianNum(Number(item.coveragePercent ?? 0).toFixed(1))}٪ منطقه</small>
                     </td>
                     <td>
                         <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-primary btn-action btn-preview"
+                                data-id="${item.id}" title="نمایش پیش‌نمایش روی نقشه"
+                                ${hasPreview ? '' : 'disabled'}>
+                                <i class="bi bi-map"></i>
+                            </button>
                             <button class="btn btn-sm btn-outline-secondary btn-action btn-metadata"
                                 data-id="${item.id}" title="اطلاعات بیشتر">
                                 <i class="bi bi-info-circle"></i>
@@ -913,16 +1025,6 @@ function applyResultFilters() {
                                 data-id="${item.id}" title="دانلود تصویر">
                                 <i class="bi bi-download"></i>
                             </button>
-                            ${inCart
-                                ? `<button class="btn btn-sm btn-danger btn-action btn-remove-cart"
-                                    data-id="${item.id}" title="حذف از سبد">
-                                    <i class="bi bi-cart-x"></i>
-                                   </button>`
-                                : `<button class="btn btn-sm btn-outline-success btn-action btn-add-cart"
-                                    data-id="${item.id}" title="افزودن به سبد">
-                                    <i class="bi bi-cart-plus"></i>
-                                   </button>`
-                            }
                         </div>
                     </td>
                 </tr>
@@ -937,10 +1039,13 @@ function applyResultFilters() {
             btn.addEventListener('click', () => removeFromCart(btn.dataset.id));
         });
         tbody.querySelectorAll('.btn-download').forEach(btn => {
-            btn.addEventListener('click', () => showBandDownloadModal(btn.dataset.id));
+            btn.addEventListener('click', () => withButtonLoading(btn, () => showBandDownloadModal(btn.dataset.id), 'در حال دریافت لینک‌ها...'));
         });
         tbody.querySelectorAll('.btn-metadata').forEach(btn => {
             btn.addEventListener('click', () => showMetadata(btn.dataset.id));
+        });
+        tbody.querySelectorAll('.btn-preview:not([disabled])').forEach(btn => {
+            btn.addEventListener('click', () => withButtonLoading(btn, () => toggleScenePreview(btn, btn.dataset.id), 'در حال دریافت...'));
         });
 
         tbody.querySelectorAll('.result-scene-checkbox').forEach(checkbox => {
@@ -972,12 +1077,64 @@ function applyResultFilters() {
         updateSelection([...ids]);
     }
 
+    /**
+     * Toggle a scene preview on the map. TileJSON (true geometry) is
+     * preferred; the flat image overlay is only a fallback.
+     * Works for satellite scenes (footprint) and DEM tiles (bbox).
+     */
+    async function toggleScenePreview(btn, sceneId) {
+        const item = currentResults.find(r => r.id === sceneId);
+        if (!item) {
+            showToast('پیش‌نمایشی برای این تصویر موجود نیست', 'warning');
+            return;
+        }
+
+        let lats = null;
+        let lngs = null;
+        if (Array.isArray(item.footprint) && item.footprint.length >= 3) {
+            lats = item.footprint.map(p => p.lat);
+            lngs = item.footprint.map(p => p.lng);
+        } else if (Array.isArray(item.bbox) && item.bbox.length >= 4) {
+            const [w, s, e, n] = item.bbox;
+            lats = [s, n];
+            lngs = [w, e];
+        }
+        if (!lats || (!item.thumbnail && !item.tilejson)) {
+            showToast('پیش‌نمایشی برای این تصویر موجود نیست', 'warning');
+            return;
+        }
+
+        const bounds = [
+            [Math.min(...lats), Math.min(...lngs)],
+            [Math.max(...lats), Math.max(...lngs)],
+        ];
+
+        let result;
+        if (item.tilejson) {
+            result = await MapModule.toggleTileJsonOverlay(item.id, item.tilejson, bounds);
+            if (result === null && item.thumbnail) {
+                // TileJSON unavailable -> fall back to stretched image
+                result = MapModule.toggleImageOverlay(item.id, item.thumbnail, bounds);
+            }
+        } else if (item.thumbnail) {
+            result = MapModule.toggleImageOverlay(item.id, item.thumbnail, bounds);
+        }
+
+        if (result === null || result === undefined) {
+            showToast('خطا در بارگذاری پیش‌نمایش', 'error');
+            return;
+        }
+        btn.classList.toggle('active', result);
+        showToast(result ? 'پیش‌نمایش روی نقشه نمایش داده شد' : 'پیش‌نمایش از نقشه حذف شد', 'info');
+    }
+
     function updateSelection(sceneIds) {
         const validIds = new Set(allResults.map(item => item.id));
         AppState.selectedScenes = sceneIds.filter(id => validIds.has(id));
         AppState.selectedScene = AppState.selectedScenes[0] || null;
         AppState.processSelectionInitialized = true;
         updateSelectionSummary();
+        redrawFootprints();
         EventBus.emit('result:selected', AppState.selectedScene);
         // Update summary with selected count
         setSummaryResults(allResults.length, AppState.selectedScenes.length);
@@ -987,15 +1144,6 @@ function applyResultFilters() {
         const summary = document.getElementById('resultsSelectionCount');
         if (summary) {
             summary.textContent = `${toPersianNum(AppState.selectedScenes.length)} تصویر انتخاب شده`;
-        }
-
-        const btnSelectAll = document.getElementById('btnSelectAllResults');
-        if (btnSelectAll && currentResults.length > 0) {
-            const selected = new Set(AppState.selectedScenes || []);
-            const allSelected = currentResults.every(item => selected.has(item.id));
-            btnSelectAll.innerHTML = allSelected
-                ? '<i class="bi bi-square"></i> لغو انتخاب همه'
-                : '<i class="bi bi-check2-square"></i> انتخاب همه';
         }
     }
 
@@ -1109,13 +1257,47 @@ function applyResultFilters() {
     /**
      * Show footprints of current page results on map
      */
+    let mappedFootprintItems = [];
+
     function showFootprintsOnMap(items) {
+        mappedFootprintItems = items || [];
+        // Page changed / new search: drop stale preview overlays
+        MapModule.clearImageOverlays();
+        MapModule.hideGeoJsonOverlay();
+        redrawFootprints();
+    }
+
+    /**
+     * Redraw footprints, highlighting those selected in the results table
+     */
+    function redrawFootprints() {
+        if (!mappedFootprintItems.length) return;
+
         MapModule.clearUserLayers();
-        items.forEach((item, index) => {
-            if (item.footprint) {
-                // Vary colors slightly
-                const hue = (index * 30) % 360;
-                const color = `hsl(${hue}, 60%, 50%)`;
+
+        const selected = new Set(AppState.selectedScenes || []);
+        const hasSelection = selected.size > 0;
+
+        // Draw unselected first so highlighted footprints sit on top
+        const ordered = [
+            ...mappedFootprintItems.filter(item => !selected.has(item.id)),
+            ...mappedFootprintItems.filter(item => selected.has(item.id)),
+        ];
+
+        ordered.forEach(item => {
+            if (!item.footprint) return;
+
+            if (selected.has(item.id)) {
+                MapModule.showFootprint(item.footprint, '#ffc107', {
+                    weight: 3,
+                    dashArray: null,
+                    fillOpacity: 0.25,
+                });
+            } else {
+                const index = mappedFootprintItems.indexOf(item);
+                const color = hasSelection
+                    ? 'hsl(210, 15%, 60%)'
+                    : (item.baseColor || `hsl(${(index * 30) % 360}, 60%, 50%)`);
                 MapModule.showFootprint(item.footprint, color);
             }
         });
@@ -1218,7 +1400,7 @@ function applyResultFilters() {
 
         showToast('در حال دریافت لینک‌های دانلود...', 'info');
 
-        fetch(API_BASE + `landsat/download-links?${params}`)
+        return fetch(`${API_BASE}/landsat/download-links?${params}`)
             .then(res => res.json())
             .then(response => {
                 if (!response.success || !response.links || response.links.length === 0) {

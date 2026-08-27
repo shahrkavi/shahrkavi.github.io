@@ -1,5 +1,16 @@
 # شهرکاوی - سامانه جستجوی دادههای مکانی
 
+## Production deployment on Ubuntu
+
+The recommended production setup runs FastAPI behind Nginx and systemd on a
+single Ubuntu server. Complete instructions, service configuration, Nginx
+configuration, HTTPS setup, and update commands are in
+[`deploy/README.md`](deploy/README.md).
+
+The application serves both the frontend and API from the same origin. Run
+the API with one worker because processing jobs and their queues are currently
+held in process memory.
+
 ## استقرار: GitHub Pages + Render
 
 ### ۱. آماده‌سازی مخزن GitHub
@@ -75,6 +86,10 @@ shahrkavi/
 │   └── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
+├── deploy/
+│   ├── README.md
+│   ├── nginx.conf
+│   └── shahrkavi.service
 └── .github/workflows/
     └── deploy.yml
 ```
@@ -101,5 +116,5 @@ uvicorn main:app --reload
 یا با Docker:
 
 ```bash
-docker compose up
+docker compose up -d --build
 ```

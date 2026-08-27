@@ -12,6 +12,7 @@ const PROCESS_TYPE_LABELS = {
     'truecolor': 'تصویر رنگی واقعی',
     'falsecolor': 'تصویر رنگی کاذب (NIR)',
     'custom_band': 'ترکیب سفارشی باندها',
+    'overture_export': 'تبدیل ساختمانهای Overture Maps',
 };
 
 const STATUS_TITLES = {
@@ -25,6 +26,13 @@ const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
 function toFaNum(value) {
     if (value === null || value === undefined) return '--';
     return String(value).replace(/\d/g, d => FA_DIGITS[+d]);
+}
+
+/** Resolve API-relative URLs ("/landsat/...") against the API base */
+function apiUrl(url) {
+    return typeof url === 'string' && url.startsWith('/')
+        ? (window.API_BASE || '') + url
+        : url;
 }
 
 function toFaDate(iso) {
@@ -43,10 +51,20 @@ function toFaDate(iso) {
 const ProcessingPage = (() => {
     let jobId = null;
     let pollTimer = null;
+    let source = 'landsat';
 
     function getJobIdFromUrl() {
         const params = new URLSearchParams(window.location.search);
         return params.get('job');
+    }
+
+    function getSourceFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('source') === 'overture' ? 'overture' : 'landsat';
+    }
+
+    function jobApiBase() {
+        return source === 'overture' ? `${API_BASE}/overture` : `${API_BASE}/landsat`;
     }
 
     function showLoading() {
@@ -68,14 +86,26 @@ const ProcessingPage = (() => {
         document.getElementById('jobBody').classList.remove('d-none');
 
         const status = job.status || 'queued';
+        const isOverture = job.dataset === 'OVT' || source === 'overture';
 
         // Metadata
         document.getElementById('jobIdLabel').textContent = job.job_id || '--';
         document.getElementById('jobDatasetLabel').textContent = job.dataset || '--';
-        document.getElementById('jobProcessLabel').textContent =
-            PROCESS_TYPE_LABELS[job.process_type] || job.process_type || '--';
-        document.getElementById('jobSceneCountLabel').textContent =
-            toFaNum((job.scene_ids || []).length);
+
+        if (isOverture) {
+            const fmtEl = document.getElementById('jobProcessLabel');
+            const fmtTitle = { shp: 'Shapefile (ZIP)', geojson: 'GeoJSON', gpkg: 'GeoPackage (GPKG)' }[job.format] || job.format || '--';
+            document.getElementById('jobProcessLabel').textContent = `تبدیل به ${fmtTitle}`;
+            document.getElementById('jobSceneCountTitle').textContent = 'تعداد ساختمان';
+            document.getElementById('jobSceneCountLabel').textContent =
+                Number.isFinite(job.total_buildings) ? toFaNum(job.total_buildings) + ' ساختمان' : '--';
+        } else {
+            document.getElementById('jobProcessLabel').textContent =
+                PROCESS_TYPE_LABELS[job.process_type] || job.process_type || '--';
+            document.getElementById('jobSceneCountTitle').textContent = 'تعداد صحنه';
+            document.getElementById('jobSceneCountLabel').textContent =
+                toFaNum((job.scene_ids || []).length);
+        }
         document.getElementById('jobCreatedLabel').textContent = toFaDate(job.created_at);
 
         // Status icon + title
@@ -92,9 +122,10 @@ const ProcessingPage = (() => {
             // Download link
             const btnDownload = document.getElementById('btnJobDownload');
             if (job.download_url) {
-                btnDownload.href = job.download_url;
+                btnDownload.href = apiUrl(job.download_url);
                 btnDownload.classList.remove('disabled');
                 btnDownload.setAttribute('aria-disabled', 'false');
+                btnDownload.innerHTML = isOverture ? '<i class="bi bi-download"></i> دانلود فایل' : '<i class="bi bi-download"></i> دانلود تصویر پردازش‌شده';
             } else {
                 btnDownload.classList.add('disabled');
                 btnDownload.setAttribute('aria-disabled', 'true');
@@ -104,7 +135,7 @@ const ProcessingPage = (() => {
             const previewContainer = document.getElementById('jobPreviewContainer');
             const previewImg = document.getElementById('jobPreviewImg');
             if (job.preview_url) {
-                previewImg.src = job.preview_url;
+                previewImg.src = apiUrl(job.preview_url);
                 previewContainer.classList.remove('d-none');
             } else {
                 previewContainer.classList.add('d-none');
@@ -136,7 +167,7 @@ const ProcessingPage = (() => {
     async function pollJob() {
         if (!jobId) return;
         try {
-            const res = await fetch(API_BASE + `landsat/jobs/${encodeURIComponent(jobId)}`);
+            const res = await fetch(`${jobApiBase()}/jobs/${encodeURIComponent(jobId)}`);
             if (res.status === 404) {
                 showNotFound();
                 return;
@@ -152,7 +183,7 @@ const ProcessingPage = (() => {
     async function loadRecentJobs(activeJobId) {
         const container = document.getElementById('recentJobsList');
         try {
-            const res = await fetch(API_BASE + 'landsat/jobs');
+            const res = await fetch(`${jobApiBase()}/jobs`);
             if (!res.ok) throw new Error('bad status');
             const data = await res.json();
             const jobs = (data.jobs || []).slice(0, 10);
@@ -168,21 +199,28 @@ const ProcessingPage = (() => {
                     'success': '<span class="badge text-bg-success">موفق</span>',
                     'failed': '<span class="badge text-bg-danger">ناموفق</span>',
                 }[j.status] || `<span class="badge text-bg-secondary">${j.status}</span>`;
+                const isOverture = j.dataset === 'OVT';
+                const label = isOverture
+                    ? `تبدیل به ${({ shp: 'Shapefile', geojson: 'GeoJSON', gpkg: 'GeoPackage' }[j.format] || j.format || '')}`
+                    : (PROCESS_TYPE_LABELS[j.process_type] || j.process_type || 'پردازش');
+                const detail = isOverture
+                    ? `${toFaNum(j.total_buildings)} ساختمان`
+                    : `${toFaNum((j.scene_ids || []).length)} صحنه`;
                 const link = j.status === 'success' && j.download_url
-                    ? `<a class="small" href="${j.download_url}"><i class="bi bi-download"></i> دانلود</a>`
+                    ? `<a class="small" href="${apiUrl(j.download_url)}"><i class="bi bi-download"></i> دانلود</a>`
                     : (j.status === 'queued' || j.status === 'running')
-                        ? `<a class="small" href="processing.html?job=${encodeURIComponent(j.job_id)}"><i class="bi bi-arrow-left"></i> پیگیری</a>`
+                        ? `<a class="small" href="processing.html?job=${encodeURIComponent(j.job_id)}&source=${isOverture ? 'overture' : 'landsat'}"><i class="bi bi-arrow-left"></i> پیگیری</a>`
                         : '';
                 return `
                     <div class="d-flex align-items-center justify-content-between py-2 border-bottom ${active ? 'bg-light rounded px-2' : ''}">
                         <div>
                             <div class="small fw-semibold">
-                                ${PROCESS_TYPE_LABELS[j.process_type] || j.process_type || 'پردازش'}
+                                ${label}
                                 <span class="text-muted">— ${j.dataset || ''}</span>
                                 ${active ? '<span class="badge text-bg-info">جاری</span>' : ''}
                             </div>
                             <div class="text-muted" style="font-size:0.75rem">
-                                ${toFaDate(j.created_at)} | ${toFaNum((j.scene_ids || []).length)} صحنه | شناسه: ${j.job_id}
+                                ${toFaDate(j.created_at)} | ${detail} | شناسه: ${j.job_id}
                             </div>
                         </div>
                         <div class="text-end">
@@ -197,6 +235,7 @@ const ProcessingPage = (() => {
     }
 
     function init() {
+        source = getSourceFromUrl();
         jobId = getJobIdFromUrl();
         loadRecentJobs(jobId);
 

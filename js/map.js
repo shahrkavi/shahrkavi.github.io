@@ -8,14 +8,17 @@ const MapModule = (() => {
     let drawnItems;          // FeatureGroup for drawn shapes
     let currentTool = null;
     let drawControl = null;
+    let selectionRect = null; // Highlight rectangle for the selected region
 
     // Basemap definitions
     const BASEMAPS = {
         satellite: {
             name: 'ماهواره‌ای',
-            layer: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: '© Esri, Maxar, Earthstar Geographics',
-                maxZoom: 19,
+            layer: L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.{ext}', {
+                minZoom: 0,
+                maxZoom: 20,
+                attribution: '&copy; CNES, Distribution Airbus DS, © Airbus DS, © PlanetObserver (Contains Copernicus Data) | &copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                ext: 'jpg'
             }),
         },
         osm: {
@@ -25,18 +28,13 @@ const MapModule = (() => {
                 maxZoom: 19,
             }),
         },
-        topo: {
-            name: 'توپوگرافی',
-            layer: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenTopoMap contributors',
-                maxZoom: 17,
-            }),
-        },
         streets: {
-            name: 'خیابان‌ها',
-            layer: L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors, Humanitarian OSM Team',
-                maxZoom: 19,
+            name: 'زمین',
+            layer: L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.{ext}', {
+                minZoom: 0,
+                maxZoom: 18,
+                attribution: '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://www.stamen.com/" target="_blank">Stamen Design</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                ext: 'png'
             }),
         },
     };
@@ -46,6 +44,9 @@ const MapModule = (() => {
 
     // Additional layers storage
     let userLayers = [];
+
+    // Scene preview overlays (scene id -> L.imageOverlay)
+    let imageOverlays = {};
 
     function init() {
         // Create map centered on Iran
@@ -330,6 +331,40 @@ const MapModule = (() => {
     }
 
     /**
+     * Draw/replace the highlight rectangle for the currently selected region
+     * (kept outside drawnItems so draw/edit/remove tools don't touch it)
+     */
+    function showSelectionBounds(north, south, east, west) {
+        if (!map) return null;
+        if (selectionRect) {
+            map.removeLayer(selectionRect);
+        }
+        selectionRect = L.rectangle(
+            [[south, west], [north, east]],
+            {
+                color: '#ff7800',
+                weight: 2,
+                dashArray: '6, 4',
+                fillColor: '#ff7800',
+                fillOpacity: 0.08,
+                interactive: false,
+            }
+        );
+        selectionRect.addTo(map);
+        return selectionRect;
+    }
+
+    /**
+     * Remove the selection rectangle (if shown)
+     */
+    function clearSelectionBounds() {
+        if (selectionRect && map) {
+            map.removeLayer(selectionRect);
+        }
+        selectionRect = null;
+    }
+
+    /**
      * Fit map to given bounds
      */
     function fitBounds(north, south, east, west) {
@@ -339,18 +374,152 @@ const MapModule = (() => {
     /**
      * Add a result footprint polygon to the map
      */
-    function showFootprint(footprint, color = '#3388ff') {
+    function showFootprint(footprint, color = '#3388ff', opts = {}) {
         const latlngs = footprint.map(p => [p.lat, p.lng]);
         const polygon = L.polygon(latlngs, {
             color: color,
-            weight: 1,
+            weight: opts.weight ?? 1,
             fillColor: color,
-            fillOpacity: 0.15,
-            dashArray: '5, 5',
+            fillOpacity: opts.fillOpacity ?? 0.15,
+            dashArray: opts.dashArray === undefined ? '5, 5' : opts.dashArray,
         });
         polygon.addTo(map);
         userLayers.push(polygon);
         return polygon;
+    }
+
+    /**
+     * Toggle a georeferenced preview image over a scene footprint.
+     * bounds = [[south, west], [north, east]]. Returns true if now shown.
+     */
+    function toggleImageOverlay(id, imageUrl, bounds) {
+        if (!map || !imageUrl) return false;
+
+        if (imageOverlays[id]) {
+            map.removeLayer(imageOverlays[id]);
+            delete imageOverlays[id];
+            return false;
+        }
+
+        const overlay = L.imageOverlay(imageUrl, bounds, {
+            opacity: 0.85,
+            interactive: true,
+        });
+        overlay.addTo(map);
+        imageOverlays[id] = overlay;
+        map.fitBounds(bounds, { padding: [20, 20] });
+        return true;
+    }
+
+    /**
+     * Toggle a TileJSON-powered preview: server-rendered Mercator tiles that
+     * follow the scene's true geometry (no stretching for non-rectangular
+     * footprints like MODIS swaths).
+     * Returns true if shown, false if removed, null on failure.
+     */
+    async function toggleTileJsonOverlay(id, tilejsonUrl, bounds) {
+        if (!map || !tilejsonUrl) return null;
+
+        if (imageOverlays[id]) {
+            map.removeLayer(imageOverlays[id]);
+            delete imageOverlays[id];
+            return false;
+        }
+
+        try {
+            const res = await fetch(tilejsonUrl);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const tj = await res.json();
+            const template = (tj.tiles && tj.tiles[0]) || null;
+            if (!template) throw new Error('TileJSON has no tile URLs');
+
+            const layer = L.tileLayer(template, { opacity: 0.9 });
+            layer.addTo(map);
+            imageOverlays[id] = layer;
+            map.fitBounds(bounds, { padding: [20, 20] });
+            return true;
+        } catch (e) {
+            console.error('TileJSON preview failed:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Remove all scene preview overlays
+     */
+    function clearImageOverlays() {
+        Object.values(imageOverlays).forEach(layer => map.removeLayer(layer));
+        imageOverlays = {};
+    }
+
+    // === OSM layer feature preview (single active overlay) ===
+
+    let osmPreviewLayer = null;
+    let osmPreviewId = null;
+
+    function escapeHtmlText(str) {
+        return String(str ?? '').replace(/[&<>"']/g,
+            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function osmPopupHtml(props) {
+        const rows = ['name', 'name:en'].filter(k => props[k]).map(k =>
+            `<div><b>${escapeHtmlText(props[k])}</b></div>`);
+        const extras = Object.entries(props)
+            .filter(([k, v]) => k !== 'name' && k !== 'name:en' && typeof v !== 'object')
+            .slice(0, 6)
+            .map(([k, v]) => `<div><span class="text-muted">${escapeHtmlText(k)}:</span> ${escapeHtmlText(v)}</div>`);
+        return `<div style="max-width:220px;font-size:.78rem" dir="ltr">${rows.concat(extras).join('')}</div>`;
+    }
+
+    /**
+     * Show a GeoJSON FeatureCollection as the single OSM layer preview.
+     * Replaces any previously shown preview. Returns true when shown.
+     */
+    function showGeoJsonOverlay(id, geojson) {
+        if (!map || !geojson) return false;
+        hideGeoJsonOverlay();
+
+        osmPreviewLayer = L.geoJSON(geojson, {
+            preferCanvas: true,
+            style: () => ({
+                color: '#fd7e14', weight: 2.5, opacity: .9, fillOpacity: .25,
+            }),
+            pointToLayer: (_f, latlng) => L.circleMarker(latlng, {
+                radius: 5, color: '#fd7e14', weight: 1.5,
+                fillColor: '#ffa94d', fillOpacity: .8,
+            }),
+            onEachFeature: (feature, layer) => {
+                if (feature && feature.properties) {
+                    layer.bindPopup(osmPopupHtml(feature.properties));
+                }
+            },
+        }).addTo(map);
+        osmPreviewId = id;
+
+        const bounds = osmPreviewLayer.getBounds();
+        if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [20, 20], maxZoom: 16 });
+        }
+        return true;
+    }
+
+    /**
+     * Remove the active OSM layer preview (if any)
+     */
+    function hideGeoJsonOverlay() {
+        const wasId = osmPreviewId;
+        if (osmPreviewLayer && map) {
+            map.removeLayer(osmPreviewLayer);
+        }
+        osmPreviewLayer = null;
+        osmPreviewId = null;
+        return wasId;
+    }
+
+    /** Id of the layer currently previewed, or null */
+    function getActiveGeoJsonId() {
+        return osmPreviewId;
     }
 
     /**
@@ -420,10 +589,18 @@ const MapModule = (() => {
         map: () => map,
         drawnItems: () => drawnItems,
         getMapBounds,
+        showSelectionBounds,
+        clearSelectionBounds,
         fitBounds,
         showFootprint,
         showStation,
         clearUserLayers,
+        toggleImageOverlay,
+        toggleTileJsonOverlay,
+        clearImageOverlays,
+        showGeoJsonOverlay,
+        hideGeoJsonOverlay,
+        getActiveGeoJsonId,
         addTileLayer,
         getBounds,
         invalidateSize,
