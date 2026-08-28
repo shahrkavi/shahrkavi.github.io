@@ -81,33 +81,38 @@ const ProcessModule = (() => {
         { value: 'height_points', label: 'نقاط ارتفاعی (نمونه‌برداری از DEM)' },
     ];
 
-    /**
-     * Only crop is meaningful for SAR (Sentinel-1) data — rebuild the
-     * process-type dropdown based on the selected dataset.
-     */
+    const OPTICAL_PROCESS_TYPES = ['crop', 'ndvi', 'ndwi', 'evi', 'truecolor', 'falsecolor', 'custom_band'];
+    const OPTICAL_DATASETS = new Set(['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'MOD', 'MYD']);
+    const PROCESS_TYPES_BY_DATASET = {
+        S1: ['crop'],
+        DEM: ['crop', 'hillshade', 'elevation', 'height_points'],
+    };
+
+    /** Rebuild the process-type dropdown using only valid operations. */
     function populateProcessTypes() {
         const select = document.getElementById('processType');
         if (!select) return;
 
         const dataset = AppState.searchCriteria.dataset;
-        let options;
-        if (dataset === 'S1') {
-            options = PROCESS_TYPE_OPTIONS.filter(o => o.value === 'crop');
-        } else if (dataset === 'DEM') {
-            options = PROCESS_TYPE_OPTIONS.filter(o =>
-                ['crop', 'hillshade', 'elevation', 'height_points'].includes(o.value)
-            );
-        } else {
-            options = PROCESS_TYPE_OPTIONS;
-        }
+        const allowedValues = dataset
+            ? (PROCESS_TYPES_BY_DATASET[dataset] || (OPTICAL_DATASETS.has(dataset) ? OPTICAL_PROCESS_TYPES : []))
+            : [];
+        const options = PROCESS_TYPE_OPTIONS.filter(o => allowedValues.includes(o.value));
 
         select.innerHTML = options.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+        select.disabled = options.length === 0;
+        if (options.length === 0) return;
+
         currentProcessType = select.value;
         onProcessTypeChange({ target: select });
     }
 
     function onTabChanged(tab) {
         if (tab !== 'process') return;
+
+        // Keep the selector correct even if the dataset changed before this
+        // tab was opened or the tab is revisited after going back.
+        populateProcessTypes();
 
         // Weather stations have no raster/vector processing pipeline; the tab
         // only explains that data can be downloaded from the results tab.

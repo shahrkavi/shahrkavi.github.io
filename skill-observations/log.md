@@ -8,3 +8,4 @@ Observations captured during task-oriented work.
 
 No observations at checkpoint 2026-08-27.
 No observations at checkpoint 2026-08-27 (production deployment preparation).
+No observations at checkpoint 2026-08-27 (dataset hierarchy update).

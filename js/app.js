@@ -69,6 +69,8 @@ const AppState = {
     isLoading: false,
 };
 
+const PREVIOUS_REGION_KEY = 'shahrkavi.previousRegion.v1';
+
 /**
  * Initialize the application
  */
@@ -77,12 +79,119 @@ document.addEventListener('DOMContentLoaded', () => {
     initPanelResize();
     initToastContainer();
     initHelpButton();
+    initPreviousRegion();
 
     // Initialize cart
     updateCartUI();
 
     console.log('شهرکاوی - Shahrkavi initialized');
 });
+
+/** Remember the last valid region locally so it can be reused later. */
+function initPreviousRegion() {
+    const fieldIds = ['North', 'South', 'East', 'West'];
+    fieldIds.forEach(id => {
+        const field = document.getElementById(id);
+        if (field) field.addEventListener('change', saveRegionFromForm);
+    });
+
+    const useButton = document.getElementById('btnUsePreviousRegion');
+    if (useButton) useButton.addEventListener('click', usePreviousRegion);
+
+    const clearButton = document.getElementById('btnClearPreviousRegion');
+    if (clearButton) clearButton.addEventListener('click', clearPreviousRegion);
+
+    EventBus.on('map:drawing:created', coords => {
+        if (coords && coords.type !== 'point') saveRegionPreference(coords);
+    });
+
+    updatePreviousRegionUI(readPreviousRegion());
+}
+
+function readPreviousRegion() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(PREVIOUS_REGION_KEY) || 'null');
+        if (!stored) return null;
+        const values = ['north', 'south', 'east', 'west'].map(key => Number(stored[key]));
+        if (!values.every(Number.isFinite) || values[0] <= values[1] || values[2] <= values[3]) return null;
+        return { north: values[0], south: values[1], east: values[2], west: values[3] };
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveRegionFromForm() {
+    const region = {
+        north: parseFloat(document.getElementById('North')?.value),
+        south: parseFloat(document.getElementById('South')?.value),
+        east: parseFloat(document.getElementById('East')?.value),
+        west: parseFloat(document.getElementById('West')?.value),
+    };
+    if (Object.values(region).every(Number.isFinite)
+        && region.north > region.south && region.east > region.west) {
+        saveRegionPreference(region);
+    }
+}
+
+function saveRegionPreference(region) {
+    if (!region) return;
+    const values = [region.north, region.south, region.east, region.west].map(Number);
+    if (!values.every(Number.isFinite) || values[0] <= values[1] || values[2] <= values[3]) return;
+    const saved = { north: values[0], south: values[1], east: values[2], west: values[3] };
+    try {
+        localStorage.setItem(PREVIOUS_REGION_KEY, JSON.stringify(saved));
+    } catch (e) { /* storage may be unavailable in private/restricted contexts */ }
+    updatePreviousRegionUI(saved);
+}
+
+function usePreviousRegion() {
+    const region = readPreviousRegion();
+    if (!region) {
+        updatePreviousRegionUI(null);
+        showToast('منطقه ذخیره‌شده‌ای یافت نشد', 'warning');
+        return;
+    }
+
+    ['North', 'South', 'East', 'West'].forEach(id => {
+        const key = id.toLowerCase();
+        const field = document.getElementById(id);
+        if (field) field.value = region[key].toFixed(4);
+    });
+
+    AppState.mapDrawings = null;
+    if (typeof MapModule !== 'undefined' && MapModule.showSelectionBounds) {
+        MapModule.showSelectionBounds(region.north, region.south, region.east, region.west);
+        if (MapModule.fitBounds) {
+            MapModule.fitBounds(region.north, region.south, region.east, region.west);
+        }
+    }
+    setSummaryRegion(region.north, region.south, region.east, region.west);
+    showToast('منطقه قبلی استفاده شد', 'success');
+}
+
+function clearPreviousRegion() {
+    try {
+        localStorage.removeItem(PREVIOUS_REGION_KEY);
+    } catch (e) { /* ignore unavailable storage */ }
+    updatePreviousRegionUI(null);
+    showToast('منطقه ذخیره‌شده حذف شد', 'info');
+}
+
+function updatePreviousRegionUI(region) {
+    const card = document.getElementById('previousRegionCard');
+    const summary = document.getElementById('previousRegionSummary');
+    const useButton = document.getElementById('btnUsePreviousRegion');
+    const clearButton = document.getElementById('btnClearPreviousRegion');
+    const hasRegion = !!region;
+    if (card) card.classList.toggle('has-region', hasRegion);
+    if (summary) {
+        summary.textContent = hasRegion
+            ? `شمال ${toPersianNum(region.north.toFixed(4))}، جنوب ${toPersianNum(region.south.toFixed(4))}، شرق ${toPersianNum(region.east.toFixed(4))}، غرب ${toPersianNum(region.west.toFixed(4))}`
+            : 'هنوز منطقه‌ای ذخیره نشده است';
+    }
+    if (useButton) useButton.disabled = !hasRegion;
+    if (clearButton) clearButton.disabled = !hasRegion;
+}
 
 /**
  * Help button handler - shows usage instructions
@@ -283,6 +392,7 @@ function initWizardNavigation() {
             showToast('طول شرقی باید بزرگتر از طول غربی باشد', 'error');
             return false;
         }
+        saveRegionPreference({ north, south, east, west });
         // Update summary
         setSummaryRegion(north, south, east, west);
         return true;

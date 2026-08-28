@@ -1,6 +1,6 @@
 /**
  * Shahrkavi - Dataset Tab Module
- * Single-select treeview for dataset selection using Quercus.js
+ * Minimal single-select dataset browser with recent-history support.
  */
 
 const DatasetsModule = (() => {
@@ -26,6 +26,8 @@ const DatasetsModule = (() => {
 
     // Datasets that skip the query step and use a specialized flow
     const SKIPS_QUERY = new Set(['DEM', 'OVT']);
+    const RECENT_DATASETS_KEY = 'shahrkavi.recentDatasets.v1';
+    const MAX_RECENT_DATASETS = 5;
 
     const CATEGORY_META = {
         Landsat: { label: 'لندست', icon: 'bi-globe-americas' },
@@ -74,76 +76,251 @@ const DatasetsModule = (() => {
         'dem': 'ارتفاع (Elevation)',
     };
 
-    let treeview = null;
+    let openCategoryId = null;
+    let openSubcategoryId = null;
+    let searchQuery = '';
+    let renderingTree = false;
 
-    function buildTreeData() {
-        const categories = {};
-        DATASETS.forEach(ds => {
-            if (!categories[ds.category]) categories[ds.category] = [];
-            categories[ds.category].push(ds);
+    function readRecentDatasetIds() {
+        try {
+            const stored = JSON.parse(localStorage.getItem(RECENT_DATASETS_KEY) || '[]');
+            if (!Array.isArray(stored)) return [];
+            const validIds = new Set(DATASETS.map(ds => ds.id));
+            return stored.filter((id, index) => validIds.has(id) && stored.indexOf(id) === index)
+                .slice(0, MAX_RECENT_DATASETS);
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function rememberDataset(datasetId) {
+        if (!DATASETS.some(ds => ds.id === datasetId)) return;
+        const recent = [datasetId, ...readRecentDatasetIds().filter(id => id !== datasetId)]
+            .slice(0, MAX_RECENT_DATASETS);
+        try {
+            localStorage.setItem(RECENT_DATASETS_KEY, JSON.stringify(recent));
+        } catch (e) { /* local storage may be unavailable */ }
+    }
+
+    function datasetChildren(categoryName) {
+        return DATASETS.filter(ds => ds.category === categoryName)
+            .map(ds => ({ id: ds.id, name: ds.name, info: ds.info }));
+    }
+
+    function buildDatasetGroups() {
+        const recentIds = readRecentDatasetIds();
+        const groups = [{
+            id: 'main-recent',
+            name: 'انتخاب‌های اخیر',
+            categoryName: 'recent',
+            categoryIcon: 'bi-clock-history',
+            recentCategory: true,
+            children: recentIds.map(id => {
+                const ds = DATASETS.find(item => item.id === id);
+                return { id: ds.id, name: ds.name, info: ds.info };
+            }),
+            subcategories: false,
+        }];
+
+        groups.push(
+            {
+                id: 'main-raster',
+                name: 'داده‌های رستری',
+                categoryIcon: 'bi-grid-1x2',
+                children: [
+                    { id: 'sub-landsat', name: 'لندست', categoryIcon: 'bi-globe-americas', children: datasetChildren('Landsat') },
+                    { id: 'sub-sentinel', name: 'سنتینل', categoryIcon: 'bi-satellite', children: datasetChildren('Sentinel') },
+                    { id: 'sub-modis', name: 'مودیس', categoryIcon: 'bi-circle-half', children: datasetChildren('MODIS') },
+                    { id: 'sub-dem', name: 'مدل‌های ارتفاعی', categoryIcon: 'bi-layers', children: datasetChildren('DEMs') },
+                ],
+                subcategories: true,
+            },
+            {
+                id: 'main-vector',
+                name: 'داده‌های برداری',
+                categoryIcon: 'bi-bezier2',
+                children: [
+                    { id: 'sub-osm', name: 'OpenStreetMap', categoryIcon: 'bi-signpost-2', children: datasetChildren('OSM') },
+                ],
+                subcategories: true,
+            },
+            {
+                id: 'main-timeseries',
+                name: 'داده‌های سری زمانی',
+                categoryIcon: 'bi-graph-up-arrow',
+                children: [
+                    { id: 'sub-weather', name: 'ایستگاه‌های هواشناسی', categoryIcon: 'bi-cloud-sun', children: datasetChildren('هواشناسی') },
+                ],
+                subcategories: true,
+            }
+        );
+
+        // Overture is a vector dataset but uses its own category label.
+        const vector = groups.find(group => group.id === 'main-vector');
+        vector.children.push({ id: 'sub-buildings', name: 'ساختمان‌ها', categoryIcon: 'bi-buildings', children: datasetChildren('OSM').filter(ds => ds.id === 'OVT') });
+        vector.children[0].children = vector.children[0].children.filter(ds => ds.id !== 'OVT');
+        return groups;
+    }
+
+    function renderDatasetTree(restoreSearchFocus = false) {
+        const container = document.getElementById('datasetList');
+        if (!container) return;
+
+        const groups = buildDatasetGroups();
+        if (!openCategoryId || !groups.some(group => group.id === openCategoryId)) {
+            openCategoryId = groups.find(group => group.id === 'main-recent')?.id || null;
+        }
+
+        const query = searchQuery.trim().toLocaleLowerCase();
+        const matchesDataset = dataset => `${dataset.name} ${dataset.info}`.toLocaleLowerCase().includes(query);
+        const groupMatches = group => !query || group.name.toLocaleLowerCase().includes(query)
+            || group.children.some(child => child.name.toLocaleLowerCase().includes(query)
+                || (child.children || []).some(matchesDataset));
+        const matchingGroups = groups.filter(groupMatches);
+        if (query && !matchingGroups.some(group => group.id === openCategoryId)) {
+            openCategoryId = matchingGroups[0]?.id || null;
+        }
+
+        renderingTree = true;
+        container.innerHTML = '';
+
+        const searchWrapper = document.createElement('div');
+        searchWrapper.className = 'dataset-list-search';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'search';
+        searchInput.className = 'treeview-search-input';
+        searchInput.placeholder = 'جستجوی نام دیتاست...';
+        searchInput.value = searchQuery;
+        searchInput.setAttribute('aria-label', 'جستجوی دیتاست');
+        const clearSearch = document.createElement('button');
+        clearSearch.type = 'button';
+        clearSearch.className = 'treeview-search-clear';
+        clearSearch.innerHTML = '<i class="bi bi-x"></i>';
+        clearSearch.title = 'پاک کردن جستجو';
+        clearSearch.hidden = !searchQuery;
+        searchWrapper.append(searchInput, clearSearch);
+        container.appendChild(searchWrapper);
+
+        const list = document.createElement('div');
+        list.className = 'dataset-category-list';
+        container.appendChild(list);
+
+        if (matchingGroups.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'dataset-list-empty';
+            empty.innerHTML = '<i class="bi bi-search"></i><span>دیتاستی با این نام پیدا نشد.</span>';
+            list.appendChild(empty);
+        }
+
+        matchingGroups.forEach(group => {
+            const categoryElement = document.createElement('section');
+            categoryElement.className = 'dataset-category-row';
+            categoryElement.dataset.categoryId = group.id;
+            const isOpen = group.id === openCategoryId;
+            if (isOpen) categoryElement.classList.add('is-open');
+
+            const categoryButton = document.createElement('button');
+            categoryButton.type = 'button';
+            categoryButton.className = 'dataset-category-toggle';
+            categoryButton.setAttribute('aria-expanded', String(isOpen));
+            categoryButton.innerHTML = `
+                <i class="bi ${group.categoryIcon}"></i>
+                <span>${group.name}</span>
+                <small>${toPersianNum(group.children.reduce((count, child) => count + (child.children ? child.children.length : 1), 0))}</small>
+                <i class="bi bi-chevron-down dataset-category-chevron"></i>
+            `;
+            categoryButton.addEventListener('click', () => {
+                openCategoryId = openCategoryId === group.id ? null : group.id;
+                openSubcategoryId = null;
+                renderDatasetTree(true);
+            });
+            categoryElement.appendChild(categoryButton);
+
+            const datasetList = document.createElement('div');
+            datasetList.className = 'dataset-category-children';
+            datasetList.hidden = !isOpen;
+            if (group.subcategories) {
+                group.children.filter(child => !query || child.name.toLocaleLowerCase().includes(query)
+                    || child.children.some(matchesDataset)).forEach(subcategory => {
+                    const subElement = document.createElement('div');
+                    subElement.className = 'dataset-subcategory-row';
+                    const subOpen = isOpen && subcategory.id === openSubcategoryId;
+                    if (subOpen) subElement.classList.add('is-open');
+                    const subButton = document.createElement('button');
+                    subButton.type = 'button';
+                    subButton.className = 'dataset-subcategory-toggle';
+                    subButton.setAttribute('aria-expanded', String(subOpen));
+                    subButton.innerHTML = `<i class="bi ${subcategory.categoryIcon}"></i><span>${subcategory.name}</span><small>${toPersianNum(subcategory.children.length)}</small><i class="bi bi-chevron-down"></i>`;
+                    subButton.addEventListener('click', () => {
+                        openCategoryId = group.id;
+                        openSubcategoryId = openSubcategoryId === subcategory.id ? null : subcategory.id;
+                        renderDatasetTree(true);
+                    });
+                    subElement.appendChild(subButton);
+                    const subDatasetList = document.createElement('div');
+                    subDatasetList.className = 'dataset-subcategory-children';
+                    subDatasetList.hidden = !subOpen;
+                    subcategory.children.filter(dataset => !query || matchesDataset(dataset)).forEach(dataset => appendDatasetOption(subDatasetList, dataset));
+                    subElement.appendChild(subDatasetList);
+                    datasetList.appendChild(subElement);
+                });
+            } else {
+                const visibleDatasets = group.children.filter(dataset => !query || matchesDataset(dataset));
+                if (visibleDatasets.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'dataset-subcategory-empty';
+                    empty.textContent = group.id === 'main-recent'
+                        ? 'هنوز دیتاستی انتخاب نشده است.'
+                        : 'موردی برای نمایش وجود ندارد.';
+                    datasetList.appendChild(empty);
+                }
+                visibleDatasets.forEach(dataset => {
+                    appendDatasetOption(datasetList, dataset);
+                });
+            }
+            categoryElement.appendChild(datasetList);
+            list.appendChild(categoryElement);
         });
 
-        return Object.keys(categories).map(catName => ({
-            id: 'cat-' + catName,
-            name: (CATEGORY_META[catName] || {}).label || catName,
-            categoryName: catName,
-            categoryIcon: (CATEGORY_META[catName] || {}).icon || 'bi-folder2-open',
-            selectable: false,
-            children: categories[catName].map(ds => ({
-                id: ds.id,
-                name: ds.name,
-                info: ds.info,
-            })),
-        }));
+        function appendDatasetOption(parent, dataset) {
+            const datasetButton = document.createElement('button');
+            datasetButton.type = 'button';
+            datasetButton.className = 'dataset-option';
+            datasetButton.dataset.datasetId = dataset.id;
+            datasetButton.setAttribute('aria-pressed', String(AppState.searchCriteria.dataset === dataset.id));
+            if (AppState.searchCriteria.dataset === dataset.id) datasetButton.classList.add('is-selected');
+            datasetButton.innerHTML = `
+                <span class="dataset-option-radio"><i class="bi bi-check"></i></span>
+                <span class="dataset-option-copy">
+                    <strong>${dataset.name}</strong>
+                    <small>${dataset.info}</small>
+                </span>
+            `;
+            datasetButton.addEventListener('click', () => selectDataset(dataset.id));
+            parent.appendChild(datasetButton);
+        }
+
+        searchInput.addEventListener('input', event => {
+            searchQuery = event.target.value;
+            renderDatasetTree(true);
+        });
+        clearSearch.addEventListener('click', () => {
+            searchQuery = '';
+            renderDatasetTree(true);
+        });
+
+        renderingTree = false;
+        if (restoreSearchFocus) {
+            searchInput.focus();
+            searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+        }
     }
 
     function init() {
         const listContainer = document.getElementById('datasetList');
         if (!listContainer) return;
 
-        const treeData = buildTreeData();
-
-        treeview = new Treeview({
-            containerId: 'datasetList',
-            data: treeData,
-            searchEnabled: true,
-            searchPlaceholder: 'جستجو...',
-            initiallyExpanded: false,
-            multiSelectEnabled: false,
-            checkboxSelectionEnabled: true,
-            accordionMode: true,
-            onSelectionChange: (selectedNodes) => {
-                if (selectedNodes.length > 0) {
-                    const node = selectedNodes[0];
-                    if (node.id && !node.id.startsWith('cat-')) {
-                        selectDataset(node.id);
-                    }
-                } else {
-                    clearDatasetSelection();
-                }
-            },
-            onRenderNode: (nodeData, nodeContentWrapperElement) => {
-                nodeContentWrapperElement.innerHTML = '';
-
-                if (!nodeData.selectable) {
-                    const icon = document.createElement('i');
-                    icon.className = `bi ${nodeData.categoryIcon || 'bi-folder2-open'} dataset-category-icon`;
-                    nodeContentWrapperElement.appendChild(icon);
-                }
-
-                const nameSpan = document.createElement('span');
-                nameSpan.className = `treeview-node-text ${nodeData.selectable ? 'fw-medium' : 'dataset-category-name'}`;
-                nameSpan.textContent = nodeData.name;
-                nodeContentWrapperElement.appendChild(nameSpan);
-
-                if (nodeData.info) {
-                    const infoSpan = document.createElement('span');
-                    infoSpan.className = 'dataset-tree-info d-block small text-muted';
-                    infoSpan.textContent = nodeData.info;
-                    nodeContentWrapperElement.appendChild(infoSpan);
-                }
-            },
-        });
+        renderDatasetTree();
 
         // Set initial selection
         const initialId = AppState.searchCriteria.dataset || null;
@@ -156,14 +333,10 @@ const DatasetsModule = (() => {
 
     function selectDataset(datasetId) {
         AppState.searchCriteria.dataset = datasetId;
+        rememberDataset(datasetId);
 
         // Update tree selection (only if not already selected to avoid loop)
-        if (treeview) {
-            const isSelected = treeview.getSelectedNodes().some(n => n.id === datasetId);
-            if (!isSelected) {
-                treeview.selectNodeById(datasetId, true);
-            }
-        }
+        if (!renderingTree) renderDatasetTree();
 
         // Update query parameter visibility
         updateQueryParamsForDataset(datasetId);

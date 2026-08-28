@@ -20,7 +20,6 @@
 
     <!-- Custom CSS -->
     <link href="css/style.css" rel="stylesheet">
-    <link href="css/treeview.css" rel="stylesheet">
 </head>
 <body>
 
@@ -92,6 +91,16 @@
                 <!-- Step 1: Region Tab -->
                 <div class="tab-pane fade show active" id="pane-region" role="tabpanel">
                     <div class="pane-content">
+                        <div class="dataset-intro">
+                            <div class="dataset-step-label">گام ۱ از ۵ <span></span> محدوده جغرافیایی</div>
+                            <div class="dataset-intro-heading">
+                                <div class="dataset-intro-icon"><i class="bi bi-geo-alt"></i></div>
+                                <div>
+                                    <h2>محدوده موردنظر را مشخص کنید</h2>
+                                    <p>مختصات را وارد کنید یا محدوده را با ابزارهای ترسیم روی نقشه انتخاب کنید.</p>
+                                </div>
+                            </div>
+                        </div>
                         <form id="regionForm" class="search-form">
                             <!-- Coordinate Section -->
                             <div class="search-section">
@@ -119,6 +128,24 @@
                                 <button type="button" class="btn btn-outline-secondary btn-sm mt-2 w-100" id="btnUseMapBounds">
                                     <i class="bi bi-map"></i> استفاده از محدوده نقشه
                                 </button>
+
+                                <div class="previous-region-card" id="previousRegionCard" aria-live="polite">
+                                    <div class="previous-region-copy">
+                                        <i class="bi bi-clock-history"></i>
+                                        <div>
+                                            <strong>منطقه قبلی</strong>
+                                            <span id="previousRegionSummary">هنوز منطقه‌ای ذخیره نشده است</span>
+                                        </div>
+                                    </div>
+                                    <div class="previous-region-actions">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="btnUsePreviousRegion" disabled>
+                                            استفاده
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-link text-muted" id="btnClearPreviousRegion" title="حذف منطقه ذخیره‌شده" disabled>
+                                            <i class="bi bi-trash3"></i>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Wizard Navigation -->
@@ -198,6 +225,16 @@
                 <!-- Step 3: Query Options Tab -->
                 <div class="tab-pane fade" id="pane-query" role="tabpanel">
                     <div class="pane-content">
+                        <div class="dataset-intro">
+                            <div class="dataset-step-label">گام ۳ از ۵ <span></span> پارامترهای جستجو</div>
+                            <div class="dataset-intro-heading">
+                                <div class="dataset-intro-icon"><i class="bi bi-sliders"></i></div>
+                                <div>
+                                    <h2>پارامترهای جستجو را تنظیم کنید</h2>
+                                    <p>بازه زمانی، پوشش ابر یا فیلترهای تخصصی دیتاست انتخاب‌شده را مشخص کنید.</p>
+                                </div>
+                            </div>
+                        </div>
                         <form id="queryForm" class="search-form">
                             <!-- Date Range Section -->
                             <div class="search-section" id="dateRangeSection">
@@ -260,6 +297,16 @@
                 <!-- Step 4: Results Tab -->
                 <div class="tab-pane fade" id="pane-results" role="tabpanel">
                     <div class="pane-content">
+                        <div class="dataset-intro">
+                            <div class="dataset-step-label">گام ۴ از ۵ <span></span> نتایج</div>
+                            <div class="dataset-intro-heading">
+                                <div class="dataset-intro-icon"><i class="bi bi-table"></i></div>
+                                <div>
+                                    <h2>نتایج را بررسی و انتخاب کنید</h2>
+                                    <p>نتایج را روی نقشه ببینید، موارد موردنظر را انتخاب کنید و سپس ادامه دهید.</p>
+                                </div>
+                            </div>
+                        </div>
                         <div class="results-header mb-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -350,6 +397,16 @@
                 <!-- Step 5: Process Tab -->
                 <div class="tab-pane fade" id="pane-process" role="tabpanel">
                     <div class="pane-content">
+                        <div class="dataset-intro">
+                            <div class="dataset-step-label">گام ۵ از ۵ <span></span> پردازش و دانلود</div>
+                            <div class="dataset-intro-heading">
+                                <div class="dataset-intro-icon"><i class="bi bi-gear"></i></div>
+                                <div>
+                                    <h2>پردازش و دانلود را انجام دهید</h2>
+                                    <p>نوع پردازش یا فرمت خروجی را انتخاب کنید و درخواست خود را ارسال کنید.</p>
+                                </div>
+                            </div>
+                        </div>
                         <!-- Selected Scene Info -->
                         <div class="search-section" id="processSceneInfo">
                             <h6 class="section-title">
@@ -379,13 +436,7 @@
                                 <i class="bi bi-magic"></i> نوع پردازش
                             </h6>
                             <select class="form-select form-select-sm" id="processType">
-                                <option value="crop">بدون شاخص (باندهای اصلی)</option>
-                                <option value="ndvi">شاخص گیاهی NDVI</option>
-                                <option value="ndwi">شاخص آبی NDWI</option>
-                                <option value="evi">شاخص گیاهی EVI</option>
-                                <option value="truecolor">تصویر رنگی واقعی</option>
-                                <option value="falsecolor">تصویر رنگی کاذب (NIR)</option>
-                                <option value="custom_band">ترکیب سفارشی باندها</option>
+                                <option value="" disabled selected>ابتدا دیتاست را انتخاب کنید</option>
                             </select>
                         </div>
 
@@ -431,32 +482,6 @@
                             <div>
                                 <label class="form-label">باند آبی (Blue)</label>
                                 <select class="form-select form-select-sm" id="customBandB"></select>
-                            </div>
-                        </div>
-
-                        <!-- Run / Download -->
-                        <div class="search-section" id="processRunSection">
-                            <div class="d-grid gap-2">
-                                <button type="button" class="btn btn-primary btn-run-process" id="btnRunProcess">
-                                    <i class="bi bi-play"></i> اجرای پردازش
-                                </button>
-                                <div id="processResult" style="display:none;">
-                                    <div class="mt-3">
-                                        <h6 class="section-title">
-                                            <i class="bi bi-image"></i> نتیجه پردازش
-                                        </h6>
-                                        <div class="border rounded overflow-hidden" id="processResultPreview">
-                                        </div>
-                                        <div class="d-flex gap-2 mt-2">
-                                            <a class="btn btn-outline-primary btn-sm flex-fill" id="btnDownloadProcessed">
-                                                <i class="bi bi-download"></i> دانلود تصویر
-                                            </a>
-                                            <button type="button" class="btn btn-outline-success btn-sm flex-fill" id="btnAddResultToMap">
-                                                <i class="bi bi-map"></i> نمایش روی نقشه
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
@@ -538,6 +563,32 @@
                                 <button type="button" class="btn btn-primary btn-sm" id="btnOvtExport">
                                     <i class="bi bi-box-arrow-down"></i> تبدیل و دانلود
                                 </button>
+                            </div>
+                        </div>
+
+                        <!-- Run / Download -->
+                        <div class="search-section" id="processRunSection">
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-primary btn-run-process" id="btnRunProcess">
+                                    <i class="bi bi-play"></i> اجرای پردازش
+                                </button>
+                                <div id="processResult" style="display:none;">
+                                    <div class="mt-3">
+                                        <h6 class="section-title">
+                                            <i class="bi bi-image"></i> نتیجه پردازش
+                                        </h6>
+                                        <div class="border rounded overflow-hidden" id="processResultPreview">
+                                        </div>
+                                        <div class="d-flex gap-2 mt-2">
+                                            <a class="btn btn-outline-primary btn-sm flex-fill" id="btnDownloadProcessed">
+                                                <i class="bi bi-download"></i> دانلود تصویر
+                                            </a>
+                                            <button type="button" class="btn btn-outline-success btn-sm flex-fill" id="btnAddResultToMap">
+                                                <i class="bi bi-map"></i> نمایش روی نقشه
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -629,7 +680,6 @@
 
     <!-- Application Scripts -->
     <script src="js/config.js"></script>
-    <script src="js/treeview.js"></script>
     <script src="js/api.js"></script>
     <script src="js/app.js"></script>
     <script src="js/jalali-datepicker.js"></script>
