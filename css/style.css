@@ -462,6 +462,20 @@ html, body {
     font-size: 0.8rem;
 }
 
+.region-upload-status {
+    min-height: 18px;
+    margin-top: 5px;
+    font-size: 0.7rem;
+}
+
+.region-upload-status.is-error {
+    color: var(--danger);
+}
+
+.region-upload-status.is-success {
+    color: var(--success);
+}
+
 /* --- Dataset Tree --- */
 .dataset-intro {
     padding: 4px 2px 16px;
@@ -1943,7 +1957,6 @@ body {
 
 .form-control-sm,
 .form-select-sm {
-    min-height: 36px;
     border-radius: 8px;
 }
 

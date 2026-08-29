@@ -32,6 +32,7 @@ const SearchModule = (() => {
         const cloudSlider = document.getElementById('CloudCover');
         const cloudValue = document.getElementById('cloudCoverValue');
         const btnUseMap = document.getElementById('btnUseMapBounds');
+        const regionFileInput = document.getElementById('regionFileInput');
 
         // Cloud cover slider live update
         if (cloudSlider && cloudValue) {
@@ -63,6 +64,10 @@ const SearchModule = (() => {
 
                 showToast('محدوده نقشه به فرم جستجو منتقل شد', 'info');
             });
+        }
+
+        if (regionFileInput) {
+            regionFileInput.addEventListener('change', () => loadRegionFile(regionFileInput));
         }
 
         // Prevent accidental form submission
@@ -122,6 +127,134 @@ const SearchModule = (() => {
         );
 
         console.log('Search module initialized');
+    }
+
+    async function loadRegionFile(input) {
+        const file = input.files?.[0];
+        if (!file) return;
+        const status = document.getElementById('regionUploadStatus');
+        setRegionUploadStatus(status, 'در حال خواندن فایل...', false);
+
+        try {
+            const extension = file.name.toLowerCase().split('.').pop();
+            let geojson;
+            let bounds;
+            if (extension === 'geojson' || extension === 'json') {
+                geojson = normaliseGeoJson(JSON.parse(await file.text()));
+            } else if (extension === 'kml') {
+                geojson = parseKml(await file.text());
+            } else if (extension === 'kmz') {
+                geojson = await parseKmz(file);
+            } else if (extension === 'shp') {
+                bounds = getShpExtent(await file.arrayBuffer());
+            } else if (extension === 'zip') {
+                if (typeof shp !== 'function') throw new Error('کتابخانه خواندن شیپ‌فایل بارگذاری نشد.');
+                geojson = normaliseShapefile(await shp(await file.arrayBuffer()));
+            } else {
+                throw new Error('فرمت فایل پشتیبانی نمی‌شود.');
+            }
+
+            bounds = bounds || getGeoJsonBounds(geojson);
+            if (!bounds) throw new Error('فایل هندسه جغرافیایی معتبری ندارد.');
+
+            ['North', 'South', 'East', 'West'].forEach((id, index) => {
+                const values = [bounds.north, bounds.south, bounds.east, bounds.west];
+                document.getElementById(id).value = values[index].toFixed(4);
+            });
+            AppState.mapDrawings = { type: 'uploaded', ...bounds };
+            MapModule.clearSelectionBounds();
+            MapModule.showSelectionBounds(bounds.north, bounds.south, bounds.east, bounds.west);
+            MapModule.fitBounds(bounds.north, bounds.south, bounds.east, bounds.west);
+            saveRegionPreference(bounds);
+            setSummaryRegion(bounds.north, bounds.south, bounds.east, bounds.west);
+            scheduleAvailableDatesRefresh();
+            setRegionUploadStatus(status, `محدوده از فایل «${file.name}» بارگذاری شد.`, true);
+        } catch (error) {
+            input.value = '';
+            setRegionUploadStatus(status, error.message || 'خواندن فایل انجام نشد.', false);
+        }
+    }
+
+    function setRegionUploadStatus(element, message, success) {
+        if (!element) return;
+        element.textContent = message;
+        element.classList.toggle('is-success', success);
+        element.classList.toggle('is-error', !success);
+    }
+
+    function normaliseShapefile(value) {
+        const collections = Array.isArray(value) ? value : [value];
+        const features = collections.flatMap(item => normaliseGeoJson(item).features);
+        return { type: 'FeatureCollection', features };
+    }
+
+    function getShpExtent(buffer) {
+        if (buffer.byteLength < 68) throw new Error('فایل SHP ناقص یا نامعتبر است.');
+        const view = new DataView(buffer);
+        if (view.getInt32(0, false) !== 9994 || view.getInt32(28, true) !== 1000) {
+            throw new Error('فایل SHP معتبر نیست.');
+        }
+
+        const xmin = view.getFloat64(36, true);
+        const ymin = view.getFloat64(44, true);
+        const xmax = view.getFloat64(52, true);
+        const ymax = view.getFloat64(60, true);
+        if (![xmin, ymin, xmax, ymax].every(Number.isFinite)
+            || xmax <= xmin || ymax <= ymin) {
+            throw new Error('فایل SHP محدوده معتبری ندارد.');
+        }
+        return { north: ymax, south: ymin, east: xmax, west: xmin };
+    }
+
+    function normaliseGeoJson(value) {
+        if (!value || typeof value !== 'object') throw new Error('فایل GeoJSON معتبر نیست.');
+        if (value.type === 'FeatureCollection') return value;
+        if (value.type === 'Feature') return { type: 'FeatureCollection', features: [value] };
+        if (value.type && value.coordinates) {
+            return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: value }] };
+        }
+        throw new Error('فایل هندسه جغرافیایی معتبر نیست.');
+    }
+
+    function parseKml(text) {
+        if (!window.toGeoJSON?.kml) throw new Error('کتابخانه خواندن KML بارگذاری نشد.');
+        const documentNode = new DOMParser().parseFromString(text, 'application/xml');
+        if (documentNode.querySelector('parsererror')) throw new Error('فایل KML معتبر نیست.');
+        return normaliseGeoJson(window.toGeoJSON.kml(documentNode));
+    }
+
+    async function parseKmz(file) {
+        if (!window.JSZip) throw new Error('کتابخانه خواندن KMZ بارگذاری نشد.');
+        const archive = await window.JSZip.loadAsync(await file.arrayBuffer());
+        const kmlEntry = Object.values(archive.files).find(entry => entry.name.toLowerCase().endsWith('.kml'));
+        if (!kmlEntry) throw new Error('فایل KMZ شامل KML نیست.');
+        return parseKml(await kmlEntry.async('text'));
+    }
+
+    function getGeoJsonBounds(geojson) {
+        const bounds = { north: -Infinity, south: Infinity, east: -Infinity, west: Infinity };
+        const visit = coordinates => {
+            if (!Array.isArray(coordinates)) return;
+            if (typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
+                const [lng, lat] = coordinates;
+                if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                    bounds.north = Math.max(bounds.north, lat);
+                    bounds.south = Math.min(bounds.south, lat);
+                    bounds.east = Math.max(bounds.east, lng);
+                    bounds.west = Math.min(bounds.west, lng);
+                }
+                return;
+            }
+            coordinates.forEach(visit);
+        };
+        geojson.features.forEach(feature => {
+            const geometry = feature.geometry;
+            if (geometry?.coordinates) visit(geometry.coordinates);
+            (geometry?.geometries || []).forEach(child => visit(child.coordinates));
+        });
+        return Number.isFinite(bounds.north) && Number.isFinite(bounds.south)
+            && Number.isFinite(bounds.east) && Number.isFinite(bounds.west)
+            ? bounds : null;
     }
 
     /**

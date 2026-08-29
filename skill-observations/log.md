@@ -22,3 +22,6 @@ No observations at checkpoint 2026-08-28 (earthquake results map preview).
 No observations at checkpoint 2026-08-28 (magnitude-scaled earthquake markers).
 No observations at checkpoint 2026-08-29 (desktop summary placement).
 No observations at checkpoint 2026-08-29 (dataset search expansion).
+No observations at checkpoint 2026-08-29 (region file upload).
+No observations at checkpoint 2026-08-29 (standalone SHP extent).
+No observations at checkpoint 2026-08-29 (uploaded extent-only rendering).
