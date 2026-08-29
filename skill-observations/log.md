@@ -25,3 +25,5 @@ No observations at checkpoint 2026-08-29 (dataset search expansion).
 No observations at checkpoint 2026-08-29 (region file upload).
 No observations at checkpoint 2026-08-29 (standalone SHP extent).
 No observations at checkpoint 2026-08-29 (uploaded extent-only rendering).
+No observations at checkpoint 2026-08-29 (CRS-aware region extent).
+No observations at checkpoint 2026-08-29 (standalone SHP PRJ selection).

@@ -27,12 +27,14 @@ const SearchModule = (() => {
     let availReqSeq = 0;
     let availDebounceTimer = null;
     let lastVisibleWindow = null;
+    let pendingShp = null;
 
     function init() {
         const cloudSlider = document.getElementById('CloudCover');
         const cloudValue = document.getElementById('cloudCoverValue');
         const btnUseMap = document.getElementById('btnUseMapBounds');
         const regionFileInput = document.getElementById('regionFileInput');
+        const regionPrjInput = document.getElementById('regionPrjInput');
 
         // Cloud cover slider live update
         if (cloudSlider && cloudValue) {
@@ -68,6 +70,9 @@ const SearchModule = (() => {
 
         if (regionFileInput) {
             regionFileInput.addEventListener('change', () => loadRegionFile(regionFileInput));
+        }
+        if (regionPrjInput) {
+            regionPrjInput.addEventListener('change', () => loadPrjFile(regionPrjInput));
         }
 
         // Prevent accidental form submission
@@ -139,6 +144,10 @@ const SearchModule = (() => {
             const extension = file.name.toLowerCase().split('.').pop();
             let geojson;
             let bounds;
+            if (extension !== 'shp') {
+                pendingShp = null;
+                showPrjPicker(false);
+            }
             if (extension === 'geojson' || extension === 'json') {
                 geojson = normaliseGeoJson(JSON.parse(await file.text()));
             } else if (extension === 'kml') {
@@ -147,6 +156,12 @@ const SearchModule = (() => {
                 geojson = await parseKmz(file);
             } else if (extension === 'shp') {
                 bounds = getShpExtent(await file.arrayBuffer());
+                pendingShp = { bounds, file };
+                const prjInput = document.getElementById('regionPrjInput');
+                if (prjInput) prjInput.value = '';
+                showPrjPicker(true);
+                setRegionUploadStatus(status, 'فایل SHP دریافت شد؛ برای تعیین CRS، فایل PRJ متناظر را انتخاب کنید.', false, true);
+                return;
             } else if (extension === 'zip') {
                 if (typeof shp !== 'function') throw new Error('کتابخانه خواندن شیپ‌فایل بارگذاری نشد.');
                 geojson = normaliseShapefile(await shp(await file.arrayBuffer()));
@@ -154,6 +169,9 @@ const SearchModule = (() => {
                 throw new Error('فرمت فایل پشتیبانی نمی‌شود.');
             }
 
+            if (geojson && extension !== 'zip') {
+                geojson = convertGeoJsonToWgs84(geojson);
+            }
             bounds = bounds || getGeoJsonBounds(geojson);
             if (!bounds) throw new Error('فایل هندسه جغرافیایی معتبری ندارد.');
 
@@ -168,18 +186,80 @@ const SearchModule = (() => {
             saveRegionPreference(bounds);
             setSummaryRegion(bounds.north, bounds.south, bounds.east, bounds.west);
             scheduleAvailableDatesRefresh();
-            setRegionUploadStatus(status, `محدوده از فایل «${file.name}» بارگذاری شد.`, true);
+            setRegionUploadStatus(status, `محدوده از فایل «${file.name}» بارگذاری شد. مختصات به WGS84 تبدیل شد.`, true);
         } catch (error) {
             input.value = '';
             setRegionUploadStatus(status, error.message || 'خواندن فایل انجام نشد.', false);
         }
     }
 
-    function setRegionUploadStatus(element, message, success) {
+    async function loadPrjFile(input) {
+        const prjFile = input.files?.[0];
+        if (!prjFile || !pendingShp) return;
+        const status = document.getElementById('regionUploadStatus');
+        try {
+            if (typeof proj4 !== 'function') throw new Error('کتابخانه تبدیل CRS بارگذاری نشد.');
+            const sourceCrs = await prjFile.text();
+            const bounds = transformShpExtent(pendingShp.bounds, sourceCrs);
+            applyRegionExtent(bounds, 'مختصات با استفاده از PRJ به WGS84 تبدیل شد.');
+            setRegionUploadStatus(status, `محدوده از «${pendingShp.file.name}» با فایل PRJ تبدیل شد.`, true);
+        } catch (error) {
+            input.value = '';
+            setRegionUploadStatus(status, error.message || 'خواندن فایل PRJ انجام نشد.', false);
+        }
+    }
+
+    function showPrjPicker(show) {
+        const wrapper = document.getElementById('regionPrjUpload');
+        if (wrapper) wrapper.hidden = !show;
+        if (!show) {
+            const input = document.getElementById('regionPrjInput');
+            if (input) input.value = '';
+        }
+        if (show) document.getElementById('regionPrjInput')?.focus();
+    }
+
+    function applyRegionExtent(bounds, note = '') {
+        ['North', 'South', 'East', 'West'].forEach((id, index) => {
+            const values = [bounds.north, bounds.south, bounds.east, bounds.west];
+            document.getElementById(id).value = values[index].toFixed(4);
+        });
+        AppState.mapDrawings = { type: 'uploaded', ...bounds };
+        MapModule.clearSelectionBounds();
+        MapModule.showSelectionBounds(bounds.north, bounds.south, bounds.east, bounds.west);
+        MapModule.fitBounds(bounds.north, bounds.south, bounds.east, bounds.west);
+        saveRegionPreference(bounds);
+        setSummaryRegion(bounds.north, bounds.south, bounds.east, bounds.west);
+        scheduleAvailableDatesRefresh();
+        if (note) setRegionUploadStatus(document.getElementById('regionUploadStatus'), note, true);
+    }
+
+    function transformShpExtent(bounds, sourceCrs) {
+        const corners = [
+            [bounds.west, bounds.south], [bounds.west, bounds.north],
+            [bounds.east, bounds.south], [bounds.east, bounds.north],
+        ].map(point => proj4(sourceCrs, 'EPSG:4326', point));
+        const longitudes = corners.map(point => point[0]);
+        const latitudes = corners.map(point => point[1]);
+        const transformed = {
+            north: Math.max(...latitudes),
+            south: Math.min(...latitudes),
+            east: Math.max(...longitudes),
+            west: Math.min(...longitudes),
+        };
+        if (![transformed.north, transformed.south, transformed.east, transformed.west].every(Number.isFinite)
+            || transformed.east <= transformed.west || transformed.north <= transformed.south) {
+            throw new Error('فایل PRJ محدوده قابل تبدیل معتبری ندارد.');
+        }
+        return transformed;
+    }
+
+    function setRegionUploadStatus(element, message, success, pending = false) {
         if (!element) return;
         element.textContent = message;
         element.classList.toggle('is-success', success);
-        element.classList.toggle('is-error', !success);
+        element.classList.toggle('is-error', !success && !pending);
+        element.classList.toggle('is-pending', pending);
     }
 
     function normaliseShapefile(value) {
@@ -214,6 +294,45 @@ const SearchModule = (() => {
             return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: value }] };
         }
         throw new Error('فایل هندسه جغرافیایی معتبر نیست.');
+    }
+
+    function convertGeoJsonToWgs84(geojson) {
+        const crsText = geojson.crs?.properties?.name
+            || geojson.crs?.properties?.href
+            || geojson.crs?.properties?.code
+            || '';
+        if (!crsText || /(?:EPSG[^0-9]*4326|CRS84)/i.test(crsText)) return geojson;
+        const crsCodes = crsText.match(/\d+/g);
+        const sourceCode = crsCodes?.[crsCodes.length - 1];
+        if (!sourceCode || typeof proj4 !== 'function') {
+            throw new Error(`سیستم مختصات «${crsText}» پشتیبانی نمی‌شود.`);
+        }
+
+        const sourceCrs = `EPSG:${sourceCode}`;
+        const transformGeometry = geometry => {
+            if (!geometry) return geometry;
+            if (geometry.coordinates) {
+                return { ...geometry, coordinates: transformCoordinates(geometry.coordinates) };
+            }
+            return { ...geometry, geometries: geometry.geometries?.map(transformGeometry) };
+        };
+        const transformCoordinates = coordinates => {
+            if (!Array.isArray(coordinates)) return coordinates;
+            if (typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
+                const transformed = proj4(sourceCrs, 'EPSG:4326', coordinates.slice(0, 2));
+                return coordinates.length > 2 ? [...transformed, ...coordinates.slice(2)] : transformed;
+            }
+            return coordinates.map(transformCoordinates);
+        };
+
+        return {
+            ...geojson,
+            crs: undefined,
+            features: geojson.features.map(feature => ({
+                ...feature,
+                geometry: transformGeometry(feature.geometry),
+            })),
+        };
     }
 
     function parseKml(text) {

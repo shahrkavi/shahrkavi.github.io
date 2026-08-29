@@ -476,6 +476,16 @@ html, body {
     color: var(--success);
 }
 
+.region-upload-status.is-pending {
+    color: #996c00;
+}
+
+.region-prj-upload {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-color);
+}
+
 /* --- Dataset Tree --- */
 .dataset-intro {
     padding: 4px 2px 16px;

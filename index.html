@@ -131,9 +131,14 @@
 
                                 <div class="region-upload mt-3">
                                     <label class="form-label" for="regionFileInput">بارگذاری محدوده از فایل</label>
-                                    <input type="file" class="form-control form-control-sm" id="regionFileInput"
+                                    <input type="file" class="form-control form-control-sm" id="regionFileInput" autocomplete="off"
                                            accept=".geojson,.json,.kml,.kmz,.shp,.zip,application/geo+json,application/json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/octet-stream,application/zip">
-                                    <small class="form-text text-muted">GeoJSON، KML، KMZ، SHP</small>
+                                    <small class="form-text text-muted">GeoJSON، KML، KMZ، SHP یا فایل زیپ SHP.</small>
+                                    <div class="region-prj-upload" id="regionPrjUpload" hidden>
+                                        <label class="form-label" for="regionPrjInput">فایل PRJ همین شیپ‌فایل</label>
+                                        <input type="file" class="form-control form-control-sm" id="regionPrjInput" accept=".prj,text/plain">
+                                        <small class="form-text text-muted">برای تبدیل دقیق محدوده به WGS84</small>
+                                    </div>
                                     <div class="region-upload-status" id="regionUploadStatus" role="status" aria-live="polite"></div>
                                 </div>
 
@@ -708,6 +713,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/shpjs@latest/dist/shp.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@6.0.0/dist/togeojson.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
