@@ -8,6 +8,7 @@ const ResultsModule = (() => {
     let currentPage = 1;
     let currentResults = [];
     let allResults = [];
+    let earthquakeMarkers = new Map();
 
     function init() {
         // Listen for search completion
@@ -28,6 +29,7 @@ const ResultsModule = (() => {
             if (tab === 'results') {
                 if (isOsmMode() && AppState.osmInfo) renderResults();
                 else if (isWeatherMode() && AppState.weatherInfo) renderResults();
+                else if (isEarthquakeMode() && AppState.earthquakeInfo) renderResults();
                 else if (isDemMode() && AppState.demInfo) renderResults();
                 else if (allResults.length > 0) renderResults();
             }
@@ -48,6 +50,10 @@ const ResultsModule = (() => {
         return (AppState.searchCriteria.dataset || '') === 'DEM';
     }
 
+    function isEarthquakeMode() {
+        return (AppState.searchCriteria.dataset || '') === 'USGS_EQ';
+    }
+
     function isOvtMode() {
         return (AppState.searchCriteria.dataset || '') === 'OVT';
     }
@@ -62,6 +68,16 @@ const ResultsModule = (() => {
         }
 
         if (isWeatherMode()) {
+            currentResults = [];
+            currentPage = 1;
+            AppState.selectedScenes = [];
+            AppState.selectedScene = null;
+            setSummaryResults(total, 0, response.message);
+            renderResults();
+            return;
+        }
+
+        if (isEarthquakeMode()) {
             currentResults = [];
             currentPage = 1;
             AppState.selectedScenes = [];
@@ -128,6 +144,11 @@ const ResultsModule = (() => {
 
         if (isWeatherMode()) {
             renderWeatherResults();
+            return;
+        }
+
+        if (isEarthquakeMode()) {
+            renderEarthquakeResults();
             return;
         }
 
@@ -697,6 +718,102 @@ const ResultsModule = (() => {
                     station.name || station.id
                 );
             }
+        });
+    }
+
+    // === USGS earthquake results ===
+    function renderEarthquakeResults() {
+        MapModule.clearUserLayers();
+        earthquakeMarkers = new Map();
+        const info = AppState.earthquakeInfo || {};
+        const features = Array.isArray(info.features) ? info.features : [];
+        const countEl = document.getElementById('resultsCount');
+        if (countEl) countEl.textContent = `${toPersianNum(features.length)} رویداد زمین‌لرزه یافت شد`;
+        const badge = document.getElementById('resultsBadge');
+        if (badge) {
+            badge.textContent = toPersianNum(features.length);
+            badge.style.display = features.length ? 'inline' : 'none';
+        }
+
+        document.getElementById('dateFilterRow')?.classList.add('d-none');
+        document.getElementById('osmResultsSummary')?.classList.add('d-none');
+        const selectionCount = document.getElementById('resultsSelectionCount');
+        if (selectionCount) selectionCount.style.display = 'none';
+        const btnGoProcess = document.getElementById('btnGoProcess');
+        if (btnGoProcess) {
+            btnGoProcess.style.display = '';
+            btnGoProcess.disabled = features.length === 0;
+            btnGoProcess.innerHTML = '<i class="bi bi-download"></i> ادامه به دانلود';
+        }
+
+        setEarthquakeTableHeader();
+        renderEarthquakeTable(features);
+        const paginationNav = document.getElementById('resultsPagination');
+        if (paginationNav) paginationNav.style.display = 'none';
+    }
+
+    function setEarthquakeTableHeader() {
+        const thead = document.querySelector('#resultsTable thead');
+        if (!thead) return;
+        thead.innerHTML = `<tr><th>بزرگی</th><th>زمان</th><th>مکان</th><th>عمق</th><th>مختصات</th><th>وضعیت</th></tr>`;
+    }
+
+    function renderEarthquakeTable(features) {
+        const tbody = document.getElementById('resultsTableBody');
+        if (!tbody) return;
+        if (!features.length) {
+            tbody.innerHTML = '<tr class="results-empty"><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-inbox" style="font-size:2rem"></i><p class="mt-2">رویدادی یافت نشد</p><small>فیلترها یا بازه زمانی را بررسی کنید</small></td></tr>';
+            return;
+        }
+        tbody.innerHTML = features.map(feature => {
+            const p = feature.properties || {};
+            const coords = feature.geometry?.coordinates || [];
+            const magnitude = Number(p.mag);
+            const eventDate = p.time ? new Date(Number(p.time)) : null;
+            const dateText = eventDate && !Number.isNaN(eventDate.getTime()) ? toPersianDate(eventDate.toISOString()) : '---';
+            const timeText = eventDate && !Number.isNaN(eventDate.getTime()) ? eventDate.toISOString().slice(11, 19) : '---';
+            const place = escapeHtml(p.place || p.title || '---');
+            const depth = Number.isFinite(Number(coords[2])) ? `${toPersianNum(Number(coords[2]).toFixed(1))} km` : '---';
+            const coordinateText = coords.length >= 2 ? `${Number(coords[1]).toFixed(4)}, ${Number(coords[0]).toFixed(4)}` : '---';
+            const eventId = escapeHtml(feature.id || `event-${features.indexOf(feature)}`);
+            return `<tr data-earthquake-id="${eventId}"><td class="fw-bold">${Number.isFinite(magnitude) ? toPersianNum(magnitude.toFixed(1)) : '---'}</td><td class="text-nowrap">${dateText}<small class="text-muted d-block" dir="ltr">${timeText} UTC</small></td><td>${place}</td><td class="text-nowrap">${depth}</td><td dir="ltr">${coordinateText}</td><td>${escapeHtml(p.status || '---')}</td></tr>`;
+        }).join('');
+
+        features.forEach((feature, index) => {
+            const coords = feature.geometry?.coordinates || [];
+            if (coords.length < 2) return;
+            const magnitude = Number(feature.properties?.mag);
+            const color = magnitude >= 6 ? '#dc3545' : magnitude >= 4 ? '#fd7e14' : '#ffc107';
+            const radius = Number.isFinite(magnitude) ? Math.max(2, Math.min(10, 3 + magnitude)) : 3;
+            const marker = MapModule.showStation(coords[1], coords[0], color, feature.properties?.place || feature.properties?.title || 'زلزله', { radius });
+            earthquakeMarkers.set(String(feature.id || `event-${index}`), { marker, radius, color });
+        });
+
+        tbody.querySelectorAll('tr[data-earthquake-id]').forEach(row => {
+            const eventId = row.dataset.earthquakeId;
+            row.addEventListener('mouseenter', () => highlightEarthquakeMarker(eventId));
+            row.addEventListener('mouseleave', clearEarthquakeMarkerHighlight);
+        });
+    }
+
+    function highlightEarthquakeMarker(eventId) {
+        earthquakeMarkers.forEach(({ marker, radius, color }) => {
+            const selected = marker === earthquakeMarkers.get(eventId)?.marker;
+            marker.setStyle({
+                color: selected ? '#212529' : '#fff',
+                weight: selected ? 3 : 2,
+                fillColor: color,
+                fillOpacity: selected ? 1 : 0.72,
+            });
+            marker.setRadius(selected ? radius + 5 : radius);
+            if (selected) marker.bringToFront();
+        });
+    }
+
+    function clearEarthquakeMarkerHighlight() {
+        earthquakeMarkers.forEach(({ marker, radius }) => {
+            marker.setStyle({ color: '#fff', weight: 2, fillOpacity: 0.9 });
+            marker.setRadius(radius);
         });
     }
 

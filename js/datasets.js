@@ -19,6 +19,7 @@ const DatasetsModule = (() => {
         { id: 'OSM', name: 'OpenStreetMap', info: 'دادههای برداری | منطقه انتخابی', category: 'OSM' },
         { id: 'OVT', name: 'ساختمانهای Overture Maps', info: 'فوتپرینت ساختمانها | ارتفاع | کل جهان | جستجوی اول چند دقیقه', category: 'OSM' },
         { id: 'WTH', name: 'ایستگاههای هواشناسی', info: 'داده‌های روزانه | ایستگاه‌های منطقه انتخابی', category: 'هواشناسی' },
+        { id: 'USGS_EQ', name: 'زمین‌لرزه‌های USGS', info: 'سری زمانی تاریخی | کاتالوگ زلزله آمریکا', category: 'سری زمانی' },
     ];
 
     // Families that expose cloud-cover metadata (per-planetary-computer)
@@ -53,6 +54,7 @@ const DatasetsModule = (() => {
         'OSM': [],
         'OVT': [],
         'WTH': [],
+        'USGS_EQ': [],
     };
 
     const BAND_LABELS = {
@@ -150,6 +152,7 @@ const DatasetsModule = (() => {
                 categoryIcon: 'bi-graph-up-arrow',
                 children: [
                     { id: 'sub-weather', name: 'ایستگاه‌های هواشناسی', categoryIcon: 'bi-cloud-sun', children: datasetChildren('هواشناسی') },
+                    { id: 'sub-earthquakes', name: 'زمین‌لرزه‌ها', categoryIcon: 'bi-activity', children: datasetChildren('سری زمانی') },
                 ],
                 subcategories: true,
             }
@@ -173,7 +176,8 @@ const DatasetsModule = (() => {
 
         const query = searchQuery.trim().toLocaleLowerCase();
         const matchesDataset = dataset => `${dataset.name} ${dataset.info}`.toLocaleLowerCase().includes(query);
-        const groupMatches = group => !query || group.name.toLocaleLowerCase().includes(query)
+        const groupNameMatches = group => Boolean(query && group.name.toLocaleLowerCase().includes(query));
+        const groupMatches = group => !query || groupNameMatches(group)
             || group.children.some(child => child.name.toLocaleLowerCase().includes(query)
                 || (child.children || []).some(matchesDataset));
         const matchingGroups = groups.filter(groupMatches);
@@ -188,7 +192,7 @@ const DatasetsModule = (() => {
         searchWrapper.className = 'dataset-list-search';
         const searchInput = document.createElement('input');
         searchInput.type = 'search';
-        searchInput.className = 'treeview-search-input';
+        searchInput.className = 'treeview-search-input form-control';
         searchInput.placeholder = 'جستجوی نام دیتاست...';
         searchInput.value = searchQuery;
         searchInput.setAttribute('aria-label', 'جستجوی دیتاست');
@@ -216,7 +220,7 @@ const DatasetsModule = (() => {
             const categoryElement = document.createElement('section');
             categoryElement.className = 'dataset-category-row';
             categoryElement.dataset.categoryId = group.id;
-            const isOpen = group.id === openCategoryId;
+            const isOpen = query ? true : group.id === openCategoryId;
             if (isOpen) categoryElement.classList.add('is-open');
 
             const categoryButton = document.createElement('button');
@@ -240,11 +244,15 @@ const DatasetsModule = (() => {
             datasetList.className = 'dataset-category-children';
             datasetList.hidden = !isOpen;
             if (group.subcategories) {
-                group.children.filter(child => !query || child.name.toLocaleLowerCase().includes(query)
-                    || child.children.some(matchesDataset)).forEach(subcategory => {
+                group.children.filter(subcategory => !query || groupNameMatches(group)
+                    || subcategory.name.toLocaleLowerCase().includes(query)
+                    || subcategory.children.some(matchesDataset)).forEach(subcategory => {
                     const subElement = document.createElement('div');
                     subElement.className = 'dataset-subcategory-row';
-                    const subOpen = isOpen && subcategory.id === openSubcategoryId;
+                    const subNameMatches = Boolean(query && subcategory.name.toLocaleLowerCase().includes(query));
+                    const subOpen = query
+                        ? groupNameMatches(group) || subNameMatches || subcategory.children.some(matchesDataset)
+                        : isOpen && subcategory.id === openSubcategoryId;
                     if (subOpen) subElement.classList.add('is-open');
                     const subButton = document.createElement('button');
                     subButton.type = 'button';
@@ -260,7 +268,8 @@ const DatasetsModule = (() => {
                     const subDatasetList = document.createElement('div');
                     subDatasetList.className = 'dataset-subcategory-children';
                     subDatasetList.hidden = !subOpen;
-                    subcategory.children.filter(dataset => !query || matchesDataset(dataset)).forEach(dataset => appendDatasetOption(subDatasetList, dataset));
+                    subcategory.children.filter(dataset => !query || groupNameMatches(group) || subNameMatches || matchesDataset(dataset))
+                        .forEach(dataset => appendDatasetOption(subDatasetList, dataset));
                     subElement.appendChild(subDatasetList);
                     datasetList.appendChild(subElement);
                 });
@@ -406,6 +415,7 @@ const DatasetsModule = (() => {
         const cloudNote = document.getElementById('cloudCoverNote');
         const dateSection = document.getElementById('dateRangeSection');
         const osmSection = document.getElementById('osmTagSection');
+        const earthquakeSection = document.getElementById('earthquakeSection');
         if (!cloudSection) return;
 
         if (!datasetId) {
@@ -413,6 +423,7 @@ const DatasetsModule = (() => {
             if (cloudNote) cloudNote.style.display = 'none';
             if (dateSection) dateSection.style.display = 'none';
             if (osmSection) osmSection.style.display = 'none';
+            if (earthquakeSection) earthquakeSection.style.display = 'none';
             return;
         }
 
@@ -420,11 +431,16 @@ const DatasetsModule = (() => {
         const isWeather = datasetId === 'WTH';
         const isDem = datasetId === 'DEM';
         const isOvt = datasetId === 'OVT';
+        const isEarthquake = datasetId === 'USGS_EQ';
+        if (isEarthquake && typeof JalaliDatePicker !== 'undefined') {
+            JalaliDatePicker.clear();
+            JalaliDatePicker.showRecentMonths();
+        }
         const supportsCloud = CLOUD_CAPABLE.has(datasetId);
 
-        cloudSection.style.display = (isOsm || isWeather || isDem || isOvt) ? 'none' : (supportsCloud ? 'block' : 'none');
+        cloudSection.style.display = (isOsm || isWeather || isDem || isOvt || isEarthquake) ? 'none' : (supportsCloud ? 'block' : 'none');
         if (cloudNote) {
-            cloudNote.style.display = (isOsm || isWeather || isDem || isOvt) ? 'none' : (supportsCloud ? 'none' : 'block');
+            cloudNote.style.display = (isOsm || isWeather || isDem || isOvt || isEarthquake) ? 'none' : (supportsCloud ? 'none' : 'block');
         }
         if (dateSection) {
             dateSection.style.display = (isOsm || isDem || isOvt) ? 'none' : 'block';
@@ -432,6 +448,7 @@ const DatasetsModule = (() => {
         if (osmSection) {
             osmSection.style.display = isOsm ? 'block' : 'none';
         }
+        if (earthquakeSection) earthquakeSection.style.display = isEarthquake ? 'block' : 'none';
     }
 
     function supportsCloud(datasetId) {

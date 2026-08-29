@@ -82,11 +82,21 @@ const JalaliDatePicker = (() => {
         const today = new Date();
         [state.viewJy, state.viewJm] =
             gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        [state.viewJy, state.viewJm] = addMonths(state.viewJy, state.viewJm, -1);
 
         function buildYearOptions(current) {
-            const start = current - 15;
+            // Include the years at both ends of a selected range. A historical
+            // range can span far beyond the old fixed 40-year window.
+            let start = current - 15;
+            let end = current + 24;
+            [state.start, state.end].forEach(iso => {
+                const date = fromIso(iso);
+                if (!date) return;
+                start = Math.min(start, date.jy);
+                end = Math.max(end, date.jy);
+            });
             let html = '';
-            for (let y = start; y < start + 40; y++) {
+            for (let y = start; y <= end; y++) {
                 html += `<option value="${y}" ${y === current ? 'selected' : ''}>${toPersianNum(y)}</option>`;
             }
             return html;
@@ -338,7 +348,18 @@ const JalaliDatePicker = (() => {
         notify();
     }
 
-    return { attach, init, onChange, onViewChange, setAvailableDates, getRange, setRange, clear };
+    /** Show the previous and current Jalali months without selecting a date. */
+    function showRecentMonths() {
+        if (!instance) return;
+        const today = new Date();
+        [instance.viewJy, instance.viewJm] =
+            gregorianToJalali(today.getFullYear(), today.getMonth() + 1, today.getDate());
+        [instance.viewJy, instance.viewJm] = addMonths(instance.viewJy, instance.viewJm, -1);
+        instance.render();
+        notifyViewChange();
+    }
+
+    return { attach, init, onChange, onViewChange, setAvailableDates, getRange, setRange, clear, showRecentMonths };
 })();
 
 // Auto-initialize on DOM ready

@@ -56,6 +56,11 @@ const ProcessModule = (() => {
             btnOvtExport.addEventListener('click', () => withButtonLoading(btnOvtExport, runOvtExport, 'در حال ثبت درخواست...'));
         }
 
+        const btnEarthquakeExport = document.getElementById('btnEarthquakeExport');
+        if (btnEarthquakeExport) {
+            btnEarthquakeExport.addEventListener('click', () => withButtonLoading(btnEarthquakeExport, runEarthquakeExport, 'در حال آماده‌سازی...'));
+        }
+
         // Listen for result selection
         EventBus.on('result:selected', onResultSelected);
 
@@ -120,6 +125,10 @@ const ProcessModule = (() => {
             showWeatherMode();
             return;
         }
+        if (isEarthquakeMode()) {
+            showEarthquakeExportMode();
+            return;
+        }
 
         // DEM tiles use the image-processing pipeline with DEM-specific types.
         if (isDemMode()) {
@@ -160,6 +169,10 @@ const ProcessModule = (() => {
         return (AppState.searchCriteria.dataset || '') === 'WTH';
     }
 
+    function isEarthquakeMode() {
+        return (AppState.searchCriteria.dataset || '') === 'USGS_EQ';
+    }
+
     function isDemMode() {
         return (AppState.searchCriteria.dataset || '') === 'DEM';
     }
@@ -192,6 +205,40 @@ const ProcessModule = (() => {
                 `;
             }
         }
+    }
+
+    function showEarthquakeExportMode() {
+        const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection', 'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection', 'osmExportSection', 'ovtExportSection', 'heightPointsSettings'];
+        ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+        const section = document.getElementById('earthquakeExportSection');
+        if (section) section.style.display = 'block';
+        const summary = document.getElementById('earthquakeExportSummary');
+        const count = AppState.earthquakeInfo?.features?.length || 0;
+        if (summary) summary.textContent = `${toPersianNum(count)} رویداد دریافت شده از USGS. فرمت خروجی را انتخاب کنید.`;
+    }
+
+    function runEarthquakeExport() {
+        const features = AppState.earthquakeInfo?.features || [];
+        if (!features.length) { showToast('داده‌ای برای خروجی وجود ندارد', 'warning'); return; }
+        const format = document.getElementById('earthquakeExportFormat')?.value || 'geojson';
+        const criteria = AppState.searchCriteria;
+        const values = {
+            format, north: criteria.north, south: criteria.south, east: criteria.east, west: criteria.west,
+            starttime: criteria.dateFrom, endtime: criteria.dateTo,
+            minmagnitude: criteria.minmagnitude, maxmagnitude: criteria.maxmagnitude,
+            mindepth: criteria.mindepth, maxdepth: criteria.maxdepth, alertlevel: criteria.alertlevel,
+            eventtype: criteria.eventtype, orderby: criteria.orderby, limit: criteria.usgsLimit,
+            offset: criteria.usgsOffset, catalog: criteria.catalog, contributor: criteria.contributor,
+            query_pairs: JSON.stringify(criteria.queryPairs || []),
+        };
+        const params = new URLSearchParams();
+        Object.entries(values).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') params.set(key, value);
+        });
+        showToast('در حال دریافت دوباره داده‌ها از USGS و ساخت فایل...', 'info');
+        return fetchAndDownload(`${API_BASE}/earthquakes/export?${params}`, `earthquakes.${format}`)
+            .then(() => showToast('دانلود آغاز شد', 'success'))
+            .catch(error => showToast(error.message, 'error'));
     }
 
     function showImageProcessMode() {

@@ -69,3 +69,5 @@ crop_err2.txt
 # Empty env files
 .env
 .env.*
+
+opencodes.md

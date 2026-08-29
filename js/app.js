@@ -63,6 +63,7 @@ const AppState = {
     osmInfo: null,  // OSM search summary {count, truncated, download_url}
     overtureInfo: null,  // Overture Maps buildings summary {total, truncated, download_url}
     weatherInfo: null,  // Weather search summary {count, stations}
+    earthquakeInfo: null,
     demInfo: null,  // DEM search summary {count, tiles}
     cart: [],
     mapDrawings: null,  // Current map drawing layer reference
@@ -431,6 +432,7 @@ function initWizardNavigation() {
             // applicable, so nothing is validated here.
             return true;
         }
+        if (dataset === 'USGS_EQ') return true;
         if (dataset === 'OVT') {
             // Overture buildings have no selection step either.
             return true;

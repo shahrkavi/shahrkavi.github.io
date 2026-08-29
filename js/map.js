@@ -562,9 +562,9 @@ const MapModule = (() => {
     /**
      * Add a weather-station point marker to the map
      */
-    function showStation(lat, lng, color = '#dc3545', label = '') {
+    function showStation(lat, lng, color = '#dc3545', label = '', options = {}) {
         const marker = L.circleMarker([lat, lng], {
-            radius: 7,
+            radius: options.radius ?? 7,
             color: '#fff',
             weight: 2,
             fillColor: color,

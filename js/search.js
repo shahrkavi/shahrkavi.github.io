@@ -4,6 +4,23 @@
  */
 
 const SearchModule = (() => {
+    const USGS_QUERY_VALUE_OPTIONS = {
+        format: ['geojson', 'xml', 'csv', 'kml'],
+        orderby: ['time', 'time-asc', 'magnitude', 'magnitude-asc'],
+        alertlevel: ['green', 'yellow', 'orange', 'red'],
+        eventtype: ['earthquake', 'quarry blast', 'explosion', 'volcanic eruption', '其他'],
+        reviewstatus: ['automatic', 'reviewed'],
+        includeallorigins: ['true', 'false'],
+        includeallmagnitudes: ['true', 'false'],
+        includearrivals: ['true', 'false'],
+        producttype: ['origin', 'phase-data', 'focal-mechanism', 'shakemap', 'dyfi', 'losspager'],
+    };
+    const USGS_QUERY_KEYS = [
+        'format', 'starttime', 'endtime', 'minlatitude', 'maxlatitude', 'minlongitude', 'maxlongitude',
+        'minmagnitude', 'maxmagnitude', 'mindepth', 'maxdepth', 'alertlevel', 'eventtype', 'orderby',
+        'limit', 'offset', 'catalog', 'contributor', 'reviewstatus', 'includeallorigins',
+        'includeallmagnitudes', 'includearrivals', 'includedeleted', 'includesuperseded', 'eventid', 'producttype', 'idlist',
+    ];
     // Datasets whose imagery availability can be highlighted on the calendar
     const AVAILABLE_DATASETS = new Set(['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'S1', 'MOD', 'MYD']);
 
@@ -57,6 +74,8 @@ const SearchModule = (() => {
         if (queryForm) {
             queryForm.addEventListener('submit', (e) => e.preventDefault());
         }
+        const addEarthquakePair = document.getElementById('btnAddEarthquakePair');
+        if (addEarthquakePair) addEarthquakePair.addEventListener('click', addEarthquakeQueryPair);
 
         // Listen for map drawing events to auto-fill coordinates
         EventBus.on('map:drawing:created', (coords) => {
@@ -126,12 +145,27 @@ const SearchModule = (() => {
             cloudMax: parseInt(document.getElementById('CloudCover').value),
             dataset: AppState.searchCriteria.dataset,
             bands: AppState.searchCriteria.bands || [],
+            minmagnitude: parseOptionalNumber('eqMinMagnitude'), maxmagnitude: parseOptionalNumber('eqMaxMagnitude'),
+            mindepth: parseOptionalNumber('eqMinDepth'), maxdepth: parseOptionalNumber('eqMaxDepth'),
+            alertlevel: document.getElementById('eqAlertLevel')?.value || '',
+            eventtype: document.getElementById('eqEventType')?.value || '',
+            orderby: document.getElementById('eqOrderBy')?.value || '',
+            usgsLimit: parseOptionalNumber('eqLimit'), usgsOffset: parseOptionalNumber('eqOffset'),
+            catalog: document.getElementById('eqCatalog')?.value.trim() || '',
+            contributor: document.getElementById('eqContributor')?.value.trim() || '',
+            queryPairs: collectEarthquakeQueryPairs(),
         };
+
+        function parseOptionalNumber(id) {
+            const value = document.getElementById(id)?.value;
+            return value === '' || value == null ? null : Number(value);
+        }
 
         const isOsm = criteria.dataset === 'OSM';
         const isWeather = criteria.dataset === 'WTH';
         const isDem = criteria.dataset === 'DEM';
         const isOvt = criteria.dataset === 'OVT';
+        const isEarthquake = criteria.dataset === 'USGS_EQ';
 
         // Buildings query uses only the region - no dates or cloud filter
         if (isOvt) {
@@ -177,6 +211,15 @@ const SearchModule = (() => {
             }
             if (criteria.dateFrom > criteria.dateTo) {
                 showToast('تاریخ شروع باید قبل از تاریخ پایان باشد', 'error');
+                return;
+            }
+        } else if (isEarthquake) {
+            if (!criteria.dateFrom || !criteria.dateTo) {
+                showToast('برای جستجوی زمین‌لرزه، بازه زمانی الزامی است', 'warning');
+                return;
+            }
+            if (criteria.usgsLimit != null && (!Number.isInteger(criteria.usgsLimit) || criteria.usgsLimit < 1 || criteria.usgsLimit > 20000)) {
+                showToast('حداکثر تعداد نتایج باید بین ۱ تا ۲۰۰۰۰ باشد', 'warning');
                 return;
             }
         } else if (criteria.dateFrom && criteria.dateTo && criteria.dateFrom > criteria.dateTo) {
@@ -230,6 +273,7 @@ const SearchModule = (() => {
                     AppState.osmInfo = response.osm || null;
                     AppState.overtureInfo = response.overture || null;
                     AppState.weatherInfo = response.weather || null;
+                    AppState.earthquakeInfo = response.earthquake || null;
                     AppState.demInfo = response.dem || null;
 
                     // Build params summary
@@ -237,6 +281,7 @@ const SearchModule = (() => {
                     if (criteria.dataset === 'OVT') {
                         params.push({ label: 'منبع', value: 'Overture Maps ساختمانها' });
                     }
+                    if (criteria.dataset === 'USGS_EQ') params.push({ label: 'مرجع', value: 'USGS Earthquake Catalog' });
                     if (criteria.dateFrom) params.push({ label: 'از تاریخ', value: isoToJalaliString(criteria.dateFrom) });
                     if (criteria.dateTo && criteria.dateTo !== criteria.dateFrom) {
                         params.push({ label: 'تا تاریخ', value: isoToJalaliString(criteria.dateTo) });
@@ -307,6 +352,25 @@ const SearchModule = (() => {
         if (![north, south, east, west].every(Number.isFinite)) return null;
         if (north <= south || east <= west) return null;
         return { north, south, east, west };
+    }
+
+    function addEarthquakeQueryPair() {
+        const container = document.getElementById('earthquakeQueryPairs');
+        if (!container) return;
+        const row = document.createElement('div');
+        row.className = 'row g-2 mb-2 earthquake-query-pair';
+        row.innerHTML = '<div class="col-5"><input class="form-control form-control-sm eq-query-key" dir="ltr" placeholder="parameter"></div>'
+            + '<div class="col-5"><input class="form-control form-control-sm eq-query-value" dir="ltr" placeholder="value"></div>'
+            + '<div class="col-2"><button type="button" class="btn btn-outline-danger btn-sm w-100 eq-query-remove" title="حذف"><i class="bi bi-trash"></i></button></div>';
+        row.querySelector('.eq-query-remove').addEventListener('click', () => row.remove());
+        container.appendChild(row);
+    }
+
+    function collectEarthquakeQueryPairs() {
+        return [...document.querySelectorAll('.earthquake-query-pair')].map(row => ({
+            key: row.querySelector('.eq-query-key')?.value.trim(),
+            value: row.querySelector('.eq-query-value')?.value.trim(),
+        })).filter(pair => pair.key && pair.value);
     }
 
     return {

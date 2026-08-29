@@ -89,11 +89,15 @@ html, body {
     position: relative;
     min-width: 0;
     background: #d4d4d4;
+    display: flex;
+    flex-direction: column;
 }
 
 #mapContainer {
     width: 100%;
-    height: 100%;
+    height: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 #map {
@@ -167,8 +171,8 @@ html, body {
 /* --- Coordinates Display --- */
 .coord-display {
     position: absolute;
-    bottom: 12px;
-    left: 12px;
+    bottom: 40px;
+    left: 5px;
     z-index: 1000;
     background: rgba(0, 0, 0, 0.75);
     color: #fff;
@@ -189,8 +193,8 @@ html, body {
 /* --- Zoom Info --- */
 .map-zoom-info {
     position: absolute;
-    bottom: 12px;
-    right: 60px;
+    bottom: 40px;
+    right: 5px;
     z-index: 1000;
     background: rgba(0, 0, 0, 0.75);
     color: #fff;
@@ -1984,19 +1988,44 @@ body {
 }
 
 .summary-box {
-    margin: 0 9px 8px;
     border-color: #dce5ef;
     border-radius: 10px;
     box-shadow: 0 3px 12px rgba(37, 64, 93, 0.05);
+    display: flex;
+    align-items: stretch;
+    position: absolute;
+    bottom: 5px;
+    width: 99%;    
 }
 
 .summary-header {
-    padding: 7px 10px;
     background: #f8fafd;
+    border-bottom: 0;
+    border-left: 1px solid var(--border-color);
+    white-space: nowrap;
 }
 
 .summary-body {
-    padding: 7px 10px;
+    max-height: none;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.summary-body .summary-row {
+    flex-shrink: 0;
+}
+
+.summary-body .summary-empty {
+    flex-direction: row;
+    gap: 6px;
+    padding: 0;
+    white-space: nowrap;
 }
 
 .results-header {
@@ -2083,6 +2112,10 @@ body {
 }
 
 @media (max-width: 768px) {
+    .summary-box, .coord-display, .map-zoom-info {
+        display: none;
+    }
+
     .app-tabs {
         overflow-x: auto;
         padding: 0 3px;

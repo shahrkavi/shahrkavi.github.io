@@ -146,6 +146,11 @@ const ApiService = (() => {
                     return;
                 }
 
+                if (dataset === 'USGS_EQ') {
+                    resolve(await searchEarthquakes(criteria));
+                    return;
+                }
+
                 if (dataset === 'DEM') {
                     // Copernicus DEM search
                     resolve(await searchDem(criteria));
@@ -351,6 +356,33 @@ const ApiService = (() => {
                     message: 'خطا در جستجوی ایستگاه‌های هواشناسی: ' + message,
                     weather: null,
                 });
+            }
+        });
+    }
+
+    function searchEarthquakes(criteria) {
+        return new Promise(async resolve => {
+            try {
+                const values = {
+                    north: criteria.north, south: criteria.south, east: criteria.east, west: criteria.west,
+                    starttime: criteria.dateFrom, endtime: criteria.dateTo,
+                    minmagnitude: criteria.minmagnitude ?? '', maxmagnitude: criteria.maxmagnitude ?? '',
+                    mindepth: criteria.mindepth ?? '', maxdepth: criteria.maxdepth ?? '',
+                    alertlevel: criteria.alertlevel || '', eventtype: criteria.eventtype || '',
+                    orderby: criteria.orderby || '', limit: criteria.usgsLimit ?? '', offset: criteria.usgsOffset ?? '',
+                    catalog: criteria.catalog || '', contributor: criteria.contributor || '',
+                    query_pairs: JSON.stringify(criteria.queryPairs || []),
+                };
+                const params = new URLSearchParams();
+                Object.entries(values).forEach(([key, value]) => {
+                    if (value !== null && value !== undefined && value !== '') params.set(key, value);
+                });
+                const response = await fetch(`${API_BASE}/earthquakes/search?${params}`);
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.detail || data.message || 'خطا در جستجوی زمین‌لرزه‌ها');
+                resolve({ success: true, data: [], total: data.count || 0, message: data.message, earthquake: data });
+            } catch (error) {
+                resolve({ success: false, data: [], total: 0, message: 'خطا در جستجوی زمین‌لرزه‌های USGS: ' + error.message });
             }
         });
     }

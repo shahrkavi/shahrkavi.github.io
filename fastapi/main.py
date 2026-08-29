@@ -15,6 +15,7 @@ from landsat import router as landsat_router
 from osm import router as osm_router
 from weather import router as weather_router
 from overture import router as overture_router
+from earthquake import router as earthquake_router
 
 app = FastAPI(title="Shahrkavi API")
 
@@ -33,6 +34,7 @@ app.include_router(landsat_router, prefix="/landsat", tags=["landsat"])
 app.include_router(osm_router, prefix="/osm", tags=["osm"])
 app.include_router(weather_router, prefix="/weather", tags=["weather"])
 app.include_router(overture_router, prefix="/overture", tags=["overture"])
+app.include_router(earthquake_router, prefix="/earthquakes", tags=["earthquakes"])
 
 # Serve static files from project root
 _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
