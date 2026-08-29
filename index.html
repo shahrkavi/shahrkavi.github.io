@@ -289,19 +289,8 @@
                                     <div class="col-6"><label class="form-label small">حداکثر بزرگی</label><input type="number" class="form-control form-control-sm" id="eqMaxMagnitude" step="0.1"></div>
                                     <div class="col-6"><label class="form-label small">حداقل عمق (km)</label><input type="number" class="form-control form-control-sm" id="eqMinDepth" step="1"></div>
                                     <div class="col-6"><label class="form-label small">حداکثر عمق (km)</label><input type="number" class="form-control form-control-sm" id="eqMaxDepth" step="1"></div>
-                                    <div class="col-6"><label class="form-label small">مرتب‌سازی (اختیاری)</label><select class="form-select form-select-sm" id="eqOrderBy"><option value="">پیش‌فرض USGS</option><option value="time-asc">قدیمی به جدید</option><option value="time">جدید به قدیمی</option><option value="magnitude-asc">بزرگی صعودی</option><option value="magnitude">بزرگی نزولی</option></select></div>
-                                    <div class="col-6"><label class="form-label small">نوع رویداد (اختیاری)</label><select class="form-select form-select-sm" id="eqEventType"><option value="">همه انواع</option><option value="earthquake">زلزله</option><option value="quarry blast">انفجار معدن</option></select></div>
-                                    <div class="col-6"><label class="form-label small">سطح هشدار (اختیاری)</label><select class="form-select form-select-sm" id="eqAlertLevel"><option value="">همه</option><option value="green">سبز</option><option value="yellow">زرد</option><option value="orange">نارنجی</option><option value="red">قرمز</option></select></div>
-                                    <div class="col-6"><label class="form-label small">تعداد (حداکثر ۲۰۰۰۰)</label><input type="number" class="form-control form-control-sm" id="eqLimit" value="20000" min="1" max="20000"></div>
-                                    <div class="col-6"><label class="form-label small">Offset</label><input type="number" class="form-control form-control-sm" id="eqOffset" value="1" min="1"></div>
-                                    <div class="col-6"><label class="form-label small">Catalog</label><input type="text" class="form-control form-control-sm" id="eqCatalog"></div>
-                                    <div class="col-6"><label class="form-label small">Contributor</label><input type="text" class="form-control form-control-sm" id="eqContributor"></div>
-                                </div>
-                                <div class="mt-3">
-                                    <label class="form-label small">پارامترهای اضافی USGS (اختیاری)</label>
-                                    <p class="text-muted small mb-2">نام و مقدار هر پارامتر مستندشده در USGS را به صورت جفت کلید-مقدار اضافه کنید؛ مانند <code>includeallorigins=true</code>.</p>
-                                    <div id="earthquakeQueryPairs"></div>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2 w-100" id="btnAddEarthquakePair"><i class="bi bi-plus-lg"></i> افزودن جفت کلید-مقدار</button>
+                                    <div class="col-6"><label class="form-label small">نوع رویداد</label><select class="form-select form-select-sm" id="eqEventType"><option value="">همه انواع</option><option value="earthquake">زلزله</option><option value="quarry blast">انفجار معدن</option></select></div>
+                                    <div class="col-6"><label class="form-label small">سطح هشدار</label><select class="form-select form-select-sm" id="eqAlertLevel"><option value="">همه</option><option value="green">سبز</option><option value="yellow">زرد</option><option value="orange">نارنجی</option><option value="red">قرمز</option></select></div>
                                 </div>
                             </div>
 
