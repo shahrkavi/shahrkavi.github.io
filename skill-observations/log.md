@@ -27,3 +27,6 @@ No observations at checkpoint 2026-08-29 (standalone SHP extent).
 No observations at checkpoint 2026-08-29 (uploaded extent-only rendering).
 No observations at checkpoint 2026-08-29 (CRS-aware region extent).
 No observations at checkpoint 2026-08-29 (standalone SHP PRJ selection).
+No observations at checkpoint 2026-08-29 (local front page landing design).
+No observations at checkpoint 2026-08-29 (minimal Bootstrap RTL front page revision).
+No observations at checkpoint 2026-08-29 (creative data pulse card revision).
