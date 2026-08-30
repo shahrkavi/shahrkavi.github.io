@@ -60,11 +60,14 @@ const ProcessingPage = (() => {
 
     function getSourceFromUrl() {
         const params = new URLSearchParams(window.location.search);
-        return params.get('source') === 'overture' ? 'overture' : 'landsat';
+        const value = params.get('source');
+        return value === 'overture' || value === 'ghs' ? value : 'landsat';
     }
 
     function jobApiBase() {
-        return source === 'overture' ? `${API_BASE}/overture` : `${API_BASE}/landsat`;
+        if (source === 'overture') return `${API_BASE}/overture`;
+        if (source === 'ghs') return `${API_BASE}/ghs`;
+        return `${API_BASE}/landsat`;
     }
 
     function showLoading() {
@@ -87,6 +90,7 @@ const ProcessingPage = (() => {
 
         const status = job.status || 'queued';
         const isOverture = job.dataset === 'OVT' || source === 'overture';
+        const isGhs = source === 'ghs' || String(job.dataset || '').startsWith('GHS_');
 
         // Metadata
         document.getElementById('jobIdLabel').textContent = job.job_id || '--';
@@ -100,8 +104,9 @@ const ProcessingPage = (() => {
             document.getElementById('jobSceneCountLabel').textContent =
                 Number.isFinite(job.total_buildings) ? toFaNum(job.total_buildings) + ' ساختمان' : '--';
         } else {
-            document.getElementById('jobProcessLabel').textContent =
-                PROCESS_TYPE_LABELS[job.process_type] || job.process_type || '--';
+            document.getElementById('jobProcessLabel').textContent = isGhs
+                ? 'دانلود گروهی رسترها'
+                : PROCESS_TYPE_LABELS[job.process_type] || job.process_type || '--';
             document.getElementById('jobSceneCountTitle').textContent = 'تعداد صحنه';
             document.getElementById('jobSceneCountLabel').textContent =
                 toFaNum((job.scene_ids || []).length);
@@ -125,7 +130,7 @@ const ProcessingPage = (() => {
                 btnDownload.href = apiUrl(job.download_url);
                 btnDownload.classList.remove('disabled');
                 btnDownload.setAttribute('aria-disabled', 'false');
-                btnDownload.innerHTML = isOverture ? '<i class="bi bi-download"></i> دانلود فایل' : '<i class="bi bi-download"></i> دانلود تصویر پردازش‌شده';
+                 btnDownload.innerHTML = (isOverture || isGhs) ? '<i class="bi bi-download"></i> دانلود فایل' : '<i class="bi bi-download"></i> دانلود تصویر پردازش‌شده';
             } else {
                 btnDownload.classList.add('disabled');
                 btnDownload.setAttribute('aria-disabled', 'true');
@@ -209,7 +214,7 @@ const ProcessingPage = (() => {
                 const link = j.status === 'success' && j.download_url
                     ? `<a class="small" href="${apiUrl(j.download_url)}"><i class="bi bi-download"></i> دانلود</a>`
                     : (j.status === 'queued' || j.status === 'running')
-                        ? `<a class="small" href="processing.html?job=${encodeURIComponent(j.job_id)}&source=${isOverture ? 'overture' : 'landsat'}"><i class="bi bi-arrow-left"></i> پیگیری</a>`
+                        ? `<a class="small" href="processing.html?job=${encodeURIComponent(j.job_id)}&source=${j.dataset?.startsWith('GHS_') ? 'ghs' : isOverture ? 'overture' : 'landsat'}"><i class="bi bi-arrow-left"></i> پیگیری</a>`
                         : '';
                 return `
                     <div class="d-flex align-items-center justify-content-between py-2 border-bottom ${active ? 'bg-light rounded px-2' : ''}">

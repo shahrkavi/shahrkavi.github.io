@@ -23,6 +23,7 @@ const SearchModule = (() => {
     ];
     // Datasets whose imagery availability can be highlighted on the calendar
     const AVAILABLE_DATASETS = new Set(['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'S1', 'MOD', 'MYD']);
+    let ghsYears = [];
 
     let availReqSeq = 0;
     let availDebounceTimer = null;
@@ -132,6 +133,21 @@ const SearchModule = (() => {
         );
 
         console.log('Search module initialized');
+    }
+
+    function loadGhsYears() {
+        if (ghsYears.length) { renderGhsYears(); return; }
+        fetch(`${API_BASE}/ghs/years`).then(response => response.json()).then(data => {
+            ghsYears = Array.isArray(data.years) ? data.years : [];
+            renderGhsYears();
+        }).catch(() => showToast('سال‌های GHS دریافت نشد', 'error'));
+    }
+
+    function renderGhsYears() {
+        const container = document.getElementById('ghsYearOptions');
+        if (!container) return;
+        const selected = new Set(AppState.searchCriteria.ghsYears || ghsYears);
+        container.innerHTML = ghsYears.map(year => `<div class="col-4 col-sm-3"><label class="form-check small"><input class="form-check-input ghs-year-checkbox" type="checkbox" value="${year}" ${selected.has(year) ? 'checked' : ''}> <span>${toPersianNum(year)}</span></label></div>`).join('');
     }
 
     async function loadRegionFile(input) {
@@ -397,6 +413,7 @@ const SearchModule = (() => {
             cloudMax: parseInt(document.getElementById('CloudCover').value),
             dataset: AppState.searchCriteria.dataset,
             bands: AppState.searchCriteria.bands || [],
+            ghsYears: [...document.querySelectorAll('.ghs-year-checkbox:checked')].map(input => Number(input.value)),
             minmagnitude: parseOptionalNumber('eqMinMagnitude'), maxmagnitude: parseOptionalNumber('eqMaxMagnitude'),
             mindepth: parseOptionalNumber('eqMinDepth'), maxdepth: parseOptionalNumber('eqMaxDepth'),
             alertlevel: document.getElementById('eqAlertLevel')?.value || '',
@@ -418,6 +435,7 @@ const SearchModule = (() => {
         const isDem = criteria.dataset === 'DEM';
         const isOvt = criteria.dataset === 'OVT';
         const isEarthquake = criteria.dataset === 'USGS_EQ';
+        const isGhs = criteria.dataset?.startsWith('GHS_');
 
         // Buildings query uses only the region - no dates or cloud filter
         if (isOvt) {
@@ -455,6 +473,14 @@ const SearchModule = (() => {
         } else if (isDem) {
             criteria.dateFrom = null;
             criteria.dateTo = null;
+        } else if (isGhs) {
+            criteria.dateFrom = null;
+            criteria.dateTo = null;
+            criteria.cloudMax = null;
+            if (!criteria.ghsYears.length) {
+                showToast('حداقل یک سال GHS را انتخاب کنید', 'warning');
+                return;
+            }
         } else if (isWeather) {
             // Weather stations always need a date range
             if (!criteria.dateFrom || !criteria.dateTo) {
@@ -527,6 +553,7 @@ const SearchModule = (() => {
                     AppState.weatherInfo = response.weather || null;
                     AppState.earthquakeInfo = response.earthquake || null;
                     AppState.demInfo = response.dem || null;
+                    AppState.ghsInfo = response.ghs || null;
 
                     // Build params summary
                     const params = [];
@@ -538,8 +565,11 @@ const SearchModule = (() => {
                     if (criteria.dateTo && criteria.dateTo !== criteria.dateFrom) {
                         params.push({ label: 'تا تاریخ', value: isoToJalaliString(criteria.dateTo) });
                     }
-                    if (!isOsm && !isDem && !isWeather && criteria.cloudMax != null) {
+                    if (!isOsm && !isDem && !isGhs && !isWeather && criteria.cloudMax != null) {
                         params.push({ label: 'حداکثر ابر', value: toPersianNum(criteria.cloudMax) + '٪' });
+                    }
+                    if (isGhs && criteria.ghsYears?.length) {
+                        params.push({ label: 'سال‌های GHS', value: criteria.ghsYears.map(toPersianNum).join('، ') });
                     }
                     if (isOsm && criteria.tags) {
                         params.push({ label: 'تگها', value: criteria.tags.map(t => `${t.key}${t.value ? '=' + t.value : ''}${t.any ? ' (هر مقدار)' : ''}`).join(', ') });
@@ -628,6 +658,7 @@ const SearchModule = (() => {
     return {
         init,
         execute,
+        loadGhsYears,
     };
 })();
 

@@ -157,6 +157,11 @@ const ApiService = (() => {
                     return;
                 }
 
+                if (dataset?.startsWith('GHS_')) {
+                    resolve(await searchGhs(criteria));
+                    return;
+                }
+
                 if (dataset === 'OVT') {
                     // Overture Maps buildings search
                     resolve(await searchOvertureBuildings(criteria));
@@ -548,6 +553,19 @@ const ApiService = (() => {
         });
     }
 
+    function searchGhs(criteria) {
+        const params = new URLSearchParams({
+            north: criteria.north, south: criteria.south, east: criteria.east, west: criteria.west,
+            layer: criteria.dataset.replace('GHS_', '').toLowerCase(),
+        });
+        if (criteria.ghsYears?.length) params.set('years', criteria.ghsYears.join(','));
+        return fetch(`${API_BASE}/ghs/search?${params}`)
+            .then(response => response.json().then(data => {
+                if (!response.ok) throw new Error(data.detail || 'خطا در جستجوی GHS');
+                return data;
+            }));
+    }
+
     /**
      * Generate a download URL (mock)
      */
@@ -559,6 +577,7 @@ const ApiService = (() => {
         SATELLITES,
         search,
         fetchAvailableDates,
+        searchGhs,
         getDownloadUrl,
     };
 })();

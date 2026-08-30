@@ -9,6 +9,8 @@ const ResultsModule = (() => {
     let currentResults = [];
     let allResults = [];
     let earthquakeMarkers = new Map();
+    let activeGhsPreviewId = null;
+    let ghsPreviewObjectUrl = null;
 
     function init() {
         // Listen for search completion
@@ -31,6 +33,7 @@ const ResultsModule = (() => {
                 else if (isWeatherMode() && AppState.weatherInfo) renderResults();
                 else if (isEarthquakeMode() && AppState.earthquakeInfo) renderResults();
                 else if (isDemMode() && AppState.demInfo) renderResults();
+                else if (isGhsMode() && AppState.ghsInfo) renderResults();
                 else if (allResults.length > 0) renderResults();
             }
         });
@@ -48,6 +51,10 @@ const ResultsModule = (() => {
 
     function isDemMode() {
         return (AppState.searchCriteria.dataset || '') === 'DEM';
+    }
+
+    function isGhsMode() {
+        return (AppState.searchCriteria.dataset || '').startsWith('GHS_');
     }
 
     function isEarthquakeMode() {
@@ -111,6 +118,16 @@ const ResultsModule = (() => {
             return;
         }
 
+        if (isGhsMode()) {
+            currentResults = allResults.slice();
+            currentPage = 1;
+            AppState.selectedScenes = currentResults.map(item => item.id);
+            AppState.selectedScene = currentResults[0]?.id || null;
+            setSummaryResults(total, currentResults.length, response.message);
+            renderResults();
+            return;
+        }
+
         // Show all results, newest first (no date grouping)
         allResults.sort((a, b) => new Date(b.date) - new Date(a.date));
         currentResults = allResults.slice();
@@ -154,6 +171,11 @@ const ResultsModule = (() => {
 
         if (isDemMode()) {
             renderDemResults();
+            return;
+        }
+
+        if (isGhsMode()) {
+            renderGhsResults();
             return;
         }
 
@@ -873,6 +895,119 @@ const ResultsModule = (() => {
 
         const paginationNav = document.getElementById('resultsPagination');
         if (paginationNav) paginationNav.style.display = 'none';
+    }
+
+    function renderGhsResults() {
+        MapModule.clearUserLayers();
+        MapModule.clearImageOverlays();
+        clearGhsPreviewState();
+        const rows = currentResults;
+        const countEl = document.getElementById('resultsCount');
+        if (countEl) countEl.textContent = `${toPersianNum(rows.length)} سال GHS یافت شد`;
+        const badge = document.getElementById('resultsBadge');
+        if (badge) {
+            badge.textContent = toPersianNum(rows.length);
+            badge.style.display = rows.length ? 'inline' : 'none';
+        }
+        document.getElementById('dateFilterRow')?.classList.add('d-none');
+        document.getElementById('osmResultsSummary')?.classList.add('d-none');
+        document.getElementById('resultsSelectionCount').style.display = 'none';
+        const next = document.getElementById('btnGoProcess');
+        if (next) next.style.display = 'none';
+        const pagination = document.getElementById('resultsPagination');
+        if (pagination) pagination.style.display = 'none';
+        const thead = document.querySelector('#resultsTable thead');
+        if (thead) thead.innerHTML = '<tr><th>سال</th><th>لایه‌ها</th><th>تفکیک مکانی</th><th>دانلود</th></tr>';
+        const resultsHeader = document.querySelector('.results-header .d-flex');
+        document.getElementById('btnGhsDownloadAll')?.remove();
+        if (resultsHeader && rows.length) {
+            const downloadAll = document.createElement('button');
+            downloadAll.type = 'button';
+            downloadAll.id = 'btnGhsDownloadAll';
+            downloadAll.className = 'btn btn-sm btn-outline-success';
+            downloadAll.innerHTML = '<i class="bi bi-file-zip"></i> دانلود همه';
+            downloadAll.addEventListener('click', () => withButtonLoading(
+                downloadAll, downloadAllGhs, 'در حال ساخت ZIP...'
+            ).catch(error => {
+                console.error('GHS bulk download error:', error);
+                showToast('خطا در ساخت فایل فشرده GHS', 'error');
+            }));
+            resultsHeader.appendChild(downloadAll);
+        }
+        const tbody = document.getElementById('resultsTableBody');
+        if (!tbody) return;
+        const layer = (AppState.searchCriteria.dataset || '').replace('GHS_', '');
+        tbody.innerHTML = rows.length ? rows.map(row => `<tr><td class="fw-medium">${toPersianNum(row.year)}</td><td dir="ltr">${layer}</td><td>${row.resolution}</td><td><div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-primary ghs-preview" data-id="${escapeHtml(row.id)}" data-url="${escapeHtml(row.preview_url)}" title="پیش‌نمایش روی نقشه"><i class="bi bi-map"></i></button><button type="button" class="btn btn-sm btn-outline-secondary ghs-download" data-url="${escapeHtml(row.download_url)}" title="دانلود رستر"><i class="bi bi-download"></i></button></div></td></tr>`).join('') : '<tr class="results-empty"><td colspan="4" class="text-center text-muted py-4">سال GHSای یافت نشد</td></tr>';
+        tbody.querySelectorAll('.ghs-preview').forEach(button => {
+            button.addEventListener('click', () => withButtonLoading(
+                button, () => toggleGhsPreview(button), 'در حال دریافت...'
+            ).catch(error => {
+                console.error('GHS preview error:', error);
+                showToast('خطا در دریافت پیش‌نمایش GHS', 'error');
+                clearGhsPreviewState();
+            }));
+        });
+        tbody.querySelectorAll('.ghs-download').forEach(button => {
+            button.addEventListener('click', () => withButtonLoading(button, () => fetchAndDownload(`${API_BASE}${button.dataset.url}`, `GHS_${button.closest('tr').querySelector('td').textContent.trim()}.tif`), 'در حال ساخت رستر...'));
+        });
+    }
+
+    function downloadAllGhs() {
+        const c = AppState.searchCriteria;
+        const layer = (c.dataset || '').replace('GHS_', '').toLowerCase();
+        return fetch(`${API_BASE}/ghs/download-all`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                years: c.ghsYears || [], layer,
+                north: c.north, south: c.south, east: c.east, west: c.west,
+            }),
+        }).then(async response => {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.job_id) throw new Error(data.detail || 'خطا در ثبت درخواست');
+            window.location.href = `processing.html?job=${encodeURIComponent(data.job_id)}&source=ghs`;
+        });
+    }
+
+    async function toggleGhsPreview(button) {
+        if (activeGhsPreviewId === button.dataset.id) {
+            MapModule.clearImageOverlays();
+            clearGhsPreviewState();
+            return;
+        }
+
+        MapModule.clearImageOverlays();
+        clearGhsPreviewState();
+        resetGhsPreviewButtons();
+
+        const response = await fetch(`${API_BASE}${button.dataset.url}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        ghsPreviewObjectUrl = URL.createObjectURL(blob);
+        const c = AppState.searchCriteria;
+        const bounds = [[c.south, c.west], [c.north, c.east]];
+        if (!MapModule.toggleImageOverlay(button.dataset.id, ghsPreviewObjectUrl, bounds)) {
+            clearGhsPreviewState();
+            throw new Error('نمایش پیش‌نمایش ممکن نیست');
+        }
+        activeGhsPreviewId = button.dataset.id;
+        resetGhsPreviewButtons();
+        button.classList.remove('btn-outline-primary');
+        button.classList.add('btn-primary');
+    }
+
+    function resetGhsPreviewButtons() {
+        document.querySelectorAll('.ghs-preview').forEach(button => {
+            const active = button.dataset.id === activeGhsPreviewId;
+            button.classList.toggle('btn-primary', active);
+            button.classList.toggle('btn-outline-primary', !active);
+        });
+    }
+
+    function clearGhsPreviewState() {
+        if (ghsPreviewObjectUrl) URL.revokeObjectURL(ghsPreviewObjectUrl);
+        ghsPreviewObjectUrl = null;
+        activeGhsPreviewId = null;
+        resetGhsPreviewButtons();
     }
 
     function setDemTableHeader() {

@@ -16,6 +16,7 @@ from osm import router as osm_router
 from weather import router as weather_router
 from overture import router as overture_router
 from earthquake import router as earthquake_router
+from ghs import router as ghs_router
 
 app = FastAPI(title="Shahrkavi API")
 
@@ -35,6 +36,7 @@ app.include_router(osm_router, prefix="/osm", tags=["osm"])
 app.include_router(weather_router, prefix="/weather", tags=["weather"])
 app.include_router(overture_router, prefix="/overture", tags=["overture"])
 app.include_router(earthquake_router, prefix="/earthquakes", tags=["earthquakes"])
+app.include_router(ghs_router, prefix="/ghs", tags=["ghs"])
 
 # Serve static files from project root
 _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))

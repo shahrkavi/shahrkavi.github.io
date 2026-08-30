@@ -65,6 +65,7 @@ const AppState = {
     weatherInfo: null,  // Weather search summary {count, stations}
     earthquakeInfo: null,
     demInfo: null,  // DEM search summary {count, tiles}
+    ghsInfo: null,
     cart: [],
     mapDrawings: null,  // Current map drawing layer reference
     isLoading: false,
@@ -445,6 +446,7 @@ function initWizardNavigation() {
             }
             return true;
         }
+        if (dataset.startsWith('GHS_')) return true;
         if (!Array.isArray(AppState.selectedScenes) || AppState.selectedScenes.length === 0) {
             showToast('لطفاً حداقل یک تصویر از جدول نتایج انتخاب کنید', 'warning');
             return false;
