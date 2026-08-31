@@ -9,7 +9,6 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     git \
     curl \
-    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -22,14 +21,14 @@ COPY . /app
 WORKDIR /app/fastapi
 RUN mkdir -p cache downloads
 
-# Download GEHistoricalImagery linux-x64 binary if not already present
+# Download the pinned GEHistoricalImagery Linux x64 binary if not already present
 RUN if [ ! -f bin/GEHistoricalImagery ]; then \
         mkdir -p bin && \
-        curl -sSL https://github.com/Mbucari/GEHistoricalImagery/releases/latest/download/GEHistoricalImagery-linux-x64.zip \
-            -o /tmp/geh.zip && \
-        unzip -o /tmp/geh.zip -d bin && \
+        curl -fL https://github.com/Mbucari/GEHistoricalImagery/releases/download/v0.7.1/GEHistoricalImagery.0.7.1-linux-x64.tar.gz \
+            -o /tmp/geh.tar.gz && \
+        tar -xzf /tmp/geh.tar.gz -C bin && \
         chmod +x bin/GEHistoricalImagery && \
-        rm /tmp/geh.zip; \
+        rm /tmp/geh.tar.gz; \
     fi
 
 EXPOSE 8000
