@@ -3,7 +3,7 @@ import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -110,7 +110,10 @@ threading.Thread(target=_downloads_cleanup_worker, daemon=True, name="downloads-
 
 
 @app.get("/")
-async def root():
+async def root(request: Request):
+    if request.url.hostname == "doc.shahrkavi.ir":
+        from docs_router import docs_index
+        return await docs_index()
     return FileResponse(INDEX_FILE)
 
 
