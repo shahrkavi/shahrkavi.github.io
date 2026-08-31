@@ -1,9 +1,14 @@
 # Ubuntu production deployment
 
-This project is deployed as one FastAPI service. The API also serves the
-frontend files, so the browser uses the same origin for both the UI and API.
-Nginx provides the public HTTP/HTTPS endpoint and systemd keeps the service
-running.
+The application is served across three subdomains from a single server:
+
+| Subdomain | Content |
+|-----------|---------|
+| `shahrkavi.ir` | Landing page (static files from `front-page/`) |
+| `data.shahrkavi.ir` | Data explorer + API (FastAPI backend) |
+| `doc.shahrkavi.ir` | Dataset documentation (markdown rendered server-side) |
+
+Nginx routes by `server_name` and systemd keeps the FastAPI service running.
 
 ## Bing Maps key
 
@@ -47,7 +52,7 @@ Do not transfer `.env`, `.env.*`, `fastapi/.env/`, `fastapi/cache/`, or
 sudo -u shahrkavi python3 -m venv /opt/shahrkavi/venv
 sudo -u shahrkavi /opt/shahrkavi/venv/bin/pip install --upgrade pip
 sudo -u shahrkavi /opt/shahrkavi/venv/bin/pip install -r /opt/shahrkavi/fastapi/requirements.txt
-sudo -u shahrkavi mkdir -p /opt/shahrkavi/fastapi/cache /opt/shahrkavi/fastapi/downloads
+sudo -u shahrkavi mkdir -p /opt/shahrkavi/fastapi/cache /opt/shahrkavi/fastapi/downloads /opt/shahrkavi/fastapi/bin/cache
 ```
 
 If deployment is from an archive instead of Git, copy the project into
@@ -90,9 +95,19 @@ View logs with:
 sudo journalctl -u shahrkavi -f
 ```
 
-## 6. Configure Nginx
+## 6. Configure DNS
 
-Replace `example.com` in `deploy/nginx.conf`, then install it:
+Add A records at your DNS provider pointing to the server IP:
+
+```
+shahrkavi.ir        → <server-ip>
+data.shahrkavi.ir   → <server-ip>
+doc.shahrkavi.ir    → <server-ip>
+```
+
+## 7. Configure Nginx
+
+Install `deploy/nginx.conf`, then install it:
 
 ```bash
 sudo cp /opt/shahrkavi/deploy/nginx.conf /etc/nginx/sites-available/shahrkavi
@@ -102,13 +117,13 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 7. Enable HTTPS
+## 8. Enable HTTPS
 
-After DNS points to the server:
+After DNS propagates:
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d example.com -d www.example.com
+sudo certbot --nginx -d shahrkavi.ir -d www.shahrkavi.ir -d data.shahrkavi.ir -d doc.shahrkavi.ir
 ```
 
 ## Updating the application

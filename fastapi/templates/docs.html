@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - شهرکاوی</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33/Vazirmatn-font-face.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 280px;
+            --primary: #1a5276;
+            --primary-light: #2e86c1;
+            --accent: #3498db;
+            --bg: #f4f6f9;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --text-muted: #7f8c8d;
+            --border: #e8ecf1;
+            --code-bg: #1e1e2e;
+            --header-gradient: linear-gradient(135deg, #1a3a4a 0%, #1a5276 50%, #1a6e50 100%);
+            --sidebar-bg: #ffffff;
+            --sidebar-border: #e8ecf1;
+        }
+
+        html, body { overflow: auto !important; height: auto !important; scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.8;
+            font-size: 15px;
+        }
+
+        /* Top Navbar */
+        .docs-navbar {
+            background: var(--header-gradient);
+            padding: 0.6rem 0;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1030;
+            height: 52px;
+        }
+        .docs-navbar .navbar-brand {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        .docs-navbar .nav-link {
+            color: rgba(255,255,255,0.85);
+            font-size: 0.85rem;
+        }
+        .docs-navbar .nav-link:hover { color: #fff; }
+
+        /* Sidebar */
+        .docs-sidebar {
+            position: fixed;
+            top: 52px;
+            right: 0;
+            width: var(--sidebar-width);
+            height: calc(100vh - 52px);
+            background: var(--sidebar-bg);
+            border-left: 1px solid var(--sidebar-border);
+            overflow-y: auto;
+            z-index: 1020;
+            padding: 1rem 0;
+            transition: transform 0.3s ease;
+        }
+        .docs-sidebar::-webkit-scrollbar { width: 4px; }
+        .docs-sidebar::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+
+        .sidebar-section { margin-bottom: 0.5rem; }
+        .sidebar-section-title {
+            padding: 0.5rem 1.25rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            user-select: none;
+        }
+        .sidebar-section-title i {
+            font-size: 0.9rem;
+            color: var(--primary-light);
+        }
+        .sidebar-section-title .chevron {
+            margin-right: auto;
+            font-size: 0.7rem;
+            transition: transform 0.2s;
+            color: #aaa;
+        }
+        .sidebar-section.collapsed .chevron { transform: rotate(-90deg); }
+        .sidebar-section.collapsed .sidebar-links { display: none; }
+
+        .sidebar-links { list-style: none; padding: 0; margin: 0; }
+        .sidebar-links li a {
+            display: block;
+            padding: 0.35rem 1.25rem 0.35rem 2rem;
+            font-size: 0.88rem;
+            color: #4a5568;
+            text-decoration: none;
+            border-right: 3px solid transparent;
+            transition: all 0.15s;
+        }
+        .sidebar-links li a:hover {
+            background: #f0f4f8;
+            color: var(--primary);
+        }
+        .sidebar-links li a.active {
+            background: #eef4fb;
+            color: var(--primary);
+            border-right-color: var(--accent);
+            font-weight: 600;
+        }
+
+        .sidebar-home {
+            display: block;
+            padding: 0.5rem 1.25rem;
+            font-size: 0.88rem;
+            color: var(--primary);
+            text-decoration: none;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 0.5rem;
+        }
+        .sidebar-home:hover { background: #f0f4f8; }
+
+        /* Main Content */
+        .docs-main {
+            margin-right: var(--sidebar-width);
+            margin-top: 52px;
+            min-height: calc(100vh - 52px);
+            padding: 1.5rem 2rem 3rem;
+            max-width: calc(100% - var(--sidebar-width));
+        }
+
+        /* Hero Header */
+        .docs-hero {
+            background: var(--header-gradient);
+            color: white;
+            padding: 2rem 2.25rem;
+            border-radius: 16px;
+            margin-bottom: 1.75rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .docs-hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -20%;
+            width: 60%;
+            height: 200%;
+            background: radial-gradient(ellipse, rgba(255,255,255,0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .docs-hero h1 {
+            margin: 0;
+            font-size: 1.85rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            position: relative;
+        }
+        .docs-hero .badge {
+            font-size: 0.78rem;
+            padding: 0.35em 0.75em;
+            font-weight: 500;
+        }
+
+        /* Content Card */
+        .docs-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+            padding: 2.25rem;
+        }
+
+        /* Typography */
+        .docs-card h1 { font-size: 1.65rem; font-weight: 700; color: var(--primary); margin-top: 0; }
+        .docs-card h2 {
+            color: var(--primary);
+            font-size: 1.35rem;
+            font-weight: 700;
+            margin-top: 2.25rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border);
+            position: relative;
+        }
+        .docs-card h2::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            right: 0;
+            width: 60px;
+            height: 2px;
+            background: var(--accent);
+        }
+        .docs-card h3 {
+            color: var(--primary-light);
+            font-size: 1.12rem;
+            font-weight: 600;
+            margin-top: 1.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .docs-card h4 {
+            color: var(--text);
+            font-size: 1.02rem;
+            font-weight: 600;
+            margin-top: 1.5rem;
+        }
+        .docs-card p { margin-bottom: 1rem; color: #34495e; }
+        .docs-card ul, .docs-card ol { padding-right: 1.5rem; margin-bottom: 1rem; }
+        .docs-card li { margin-bottom: 0.35rem; color: #34495e; }
+        .docs-card strong { color: var(--text); }
+
+        /* Links */
+        .docs-card a {
+            color: var(--accent);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .docs-card a:hover { border-bottom-color: var(--accent); }
+
+        /* Tables */
+        .docs-card table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 1.25rem 0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            font-size: 0.9rem;
+        }
+        .docs-card table thead th {
+            background: var(--primary);
+            color: white;
+            padding: 0.7rem 1rem;
+            font-weight: 600;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .docs-card table tbody td {
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--border);
+            color: #34495e;
+        }
+        .docs-card table tbody tr:last-child td { border-bottom: none; }
+        .docs-card table tbody tr:nth-child(even) { background: #f8fafc; }
+        .docs-card table tbody tr:hover { background: #eef3f8; }
+
+        /* Code Blocks - GitHub Style */
+        .code-block-wrapper {
+            position: relative;
+            margin: 1.25rem 0;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #d1d9e0;
+            background: #f6f8fa;
+        }
+        .code-block-header {
+            background: #f6f8fa;
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #d1d9e0;
+            min-height: 32px;
+        }
+        .code-block-lang {
+            font-size: 0.78rem;
+            color: #656d76;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            font-weight: 500;
+        }
+        .code-block-copy {
+            background: none;
+            border: 1px solid #d1d9e0;
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 0.75rem;
+            color: #656d76;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+        }
+        .code-block-copy:hover {
+            background: #e9ecef;
+            border-color: #afb8c1;
+            color: #24292f;
+        }
+        .code-block-copy.copied {
+            color: #1a7f37;
+            border-color: #1a7f37;
+        }
+        .docs-card pre {
+            direction: ltr;
+            text-align: left;
+            background: #f6f8fa !important;
+            color: #24292f;
+            padding: 1rem;
+            margin: 0;
+            border-radius: 0;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+        }
+        .docs-card pre code {
+            direction: ltr;
+            text-align: left;
+            background: transparent;
+            padding: 0;
+            font-size: inherit;
+            color: inherit;
+        }
+        .docs-card pre code .comment { color: #6e7781; }
+        .docs-card pre code .keyword { color: #cf222e; }
+        .docs-card pre code .string { color: #0a3069; }
+        .docs-card pre code .function { color: #8250df; }
+        .docs-card pre code .number { color: #0550ae; }
+        .docs-card pre code .builtin { color: #953800; }
+        .docs-card pre code .decorator { color: #8250df; }
+
+        /* Inline Code - GitHub Style */
+        .docs-card :not(pre) > code {
+            direction: ltr;
+            text-align: left;
+            background: rgba(175, 184, 193, 0.2);
+            color: #24292f;
+            padding: 0.15em 0.4em;
+            border-radius: 6px;
+            font-size: 0.85em;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+            font-weight: 400;
+        }
+
+        /* Blockquotes */
+        .docs-card blockquote {
+            background: #eef6ff;
+            border-right: 4px solid var(--accent);
+            padding: 1rem 1.25rem;
+            margin: 1.25rem 0;
+            border-radius: 0 10px 10px 0;
+            color: #2c3e50;
+        }
+        .docs-card blockquote p { margin-bottom: 0; }
+
+        /* HR */
+        .docs-card hr {
+            border: none;
+            height: 1px;
+            background: var(--border);
+            margin: 2rem 0;
+        }
+
+        /* Footer */
+        .docs-footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .docs-footer a { color: var(--primary); text-decoration: none; }
+
+        /* Back to Top */
+        .back-to-top {
+            position: fixed;
+            bottom: 2rem;
+            left: 2rem;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            cursor: pointer;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+            z-index: 99;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        .back-to-top.visible { opacity: 1; visibility: visible; }
+        .back-to-top:hover { background: var(--primary-light); transform: translateY(-2px); }
+
+        /* Sidebar Toggle (Mobile) */
+        .sidebar-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1019;
+        }
+
+        /* Responsive */
+        @media (max-width: 992px) {
+            .docs-sidebar {
+                transform: translateX(100%);
+            }
+            .docs-sidebar.open {
+                transform: translateX(0);
+            }
+            .sidebar-toggle { display: block; }
+            .sidebar-overlay.show { display: block; }
+            .docs-main {
+                margin-right: 0;
+                max-width: 100%;
+                padding: 1.25rem 1rem 2rem;
+            }
+            .docs-card { padding: 1.5rem; }
+            .docs-hero { padding: 1.5rem 1.25rem; }
+            .docs-hero h1 { font-size: 1.45rem; }
+        }
+
+        @media (max-width: 576px) {
+            .docs-card h2 { font-size: 1.15rem; }
+            .docs-card table { font-size: 0.82rem; }
+        }
+
+        .hljs { background: #f6f8fa !important; color: #24292f !important; }
+    </style>
+</head>
+<body>
+    <!-- Top Navbar -->
+    <nav class="docs-navbar">
+        <div class="container-fluid d-flex align-items-center justify-content-between px-3">
+            <div class="d-flex align-items-center gap-3">
+                <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+                    <i class="bi bi-list"></i>
+                </button>
+                <a class="navbar-brand text-white" href="https://data.shahrkavi.ir/">
+                    <i class="bi bi-globe-americas me-2"></i>شهرکاوی
+                </a>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <a href="/" class="nav-link d-none d-md-inline">
+                    <i class="bi bi-book me-1"></i>مستندات
+                </a>
+                <a href="https://data.shahrkavi.ir/" class="nav-link">
+                    <i class="bi bi-house-door me-1"></i>خانه
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="sidebar">
+        <a href="/" class="sidebar-home">
+            <i class="bi bi-list-ul me-2"></i>فهرست مستندات
+        </a>
+
+        {% for group in sidebar_nav %}
+        <div class="sidebar-section" data-section="{{ loop.index }}">
+            <div class="sidebar-section-title" onclick="toggleSection({{ loop.index }})">
+                <i class="bi {{ group.icon }}"></i>
+                <span>{{ group.title }}</span>
+                <i class="bi bi-chevron-down chevron"></i>
+            </div>
+            <ul class="sidebar-links">
+                {% for item in group.links %}
+                <li>
+                    <a href="/{{ item.slug }}/"
+                       class="{% if current_slug == item.slug %}active{% endif %}">
+                        {{ item.label }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-main">
+        <div class="docs-hero">
+            <h1>{{ title }}</h1>
+            <div class="mt-3 d-flex flex-wrap gap-2">
+                {% for badge in badges %}
+                <span class="badge bg-white bg-opacity-25 text-white">{{ badge }}</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="docs-card">
+            {{ content | safe }}
+        </div>
+
+        <footer class="docs-footer">
+            <hr>
+            <p class="mt-3 mb-0">
+                مستندات شهرکاوی |
+                <a href="https://data.shahrkavi.ir/">بازگشت به صفحه اصلی</a> |
+                <a href="/">فهرست مستندات</a>
+            </p>
+        </footer>
+    </main>
+
+    <button class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+        <i class="bi bi-arrow-up"></i>
+    </button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+    <script>
+        // Syntax highlighting with GitHub style
+        document.querySelectorAll('pre code').forEach(block => {
+            hljs.highlightElement(block);
+        });
+
+        // Wrap code blocks with GitHub-style container + copy button
+        document.querySelectorAll('.docs-card pre').forEach(pre => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'code-block-wrapper';
+            const header = document.createElement('div');
+            header.className = 'code-block-header';
+            const lang = pre.className.match(/language-(\w+)/);
+            const langName = lang ? lang[1] : 'code';
+            const langLabels = { python: 'Python', bash: 'Bash', javascript: 'JavaScript', js: 'JavaScript' };
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'code-block-copy';
+            copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> کپی';
+            copyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(pre.textContent).then(() => {
+                    copyBtn.innerHTML = '<i class="bi bi-check-lg"></i> کپی شد';
+                    copyBtn.classList.add('copied');
+                    setTimeout(() => {
+                        copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> کپی';
+                        copyBtn.classList.remove('copied');
+                    }, 2000);
+                });
+            });
+            header.innerHTML = `<span class="code-block-lang">${langLabels[langName] || langName}</span>`;
+            header.appendChild(copyBtn);
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.appendChild(header);
+            wrapper.appendChild(pre);
+        });
+
+        // Sidebar toggle (mobile)
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        const toggle = document.getElementById('sidebarToggle');
+
+        function openSidebar() {
+            sidebar.classList.add('open');
+            overlay.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+        toggle.addEventListener('click', () => {
+            sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+        });
+        overlay.addEventListener('click', closeSidebar);
+
+        // Section collapse toggle
+        function toggleSection(idx) {
+            const section = document.querySelector(`[data-section="${idx}"]`);
+            section.classList.toggle('collapsed');
+        }
+
+        // Back to top button
+        const backToTop = document.getElementById('backToTop');
+        window.addEventListener('scroll', () => {
+            backToTop.classList.toggle('visible', window.scrollY > 300);
+        });
+    </script>
+</body>
+</html>

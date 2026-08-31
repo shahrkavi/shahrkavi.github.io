@@ -64,6 +64,38 @@ window.API_BASE = 'https://shahrkavi-api.onrender.com';
 
 ---
 
+## مستندات دیتاست‌ها
+
+برای مشاهده مستندات کامل هر دیتاست با کدهای نمونه پایتون به آدرس زیر مراجعه کنید:
+
+**`/docs/`**
+
+لیست مستندات:
+
+| دیتاست | لینک |
+|--------|------|
+| Landsat 9 | [`/docs/landsat9/`](/docs/landsat9/) |
+| Landsat 8 | [`/docs/landsat8/`](/docs/landsat8/) |
+| Landsat 7 | [`/docs/landsat7/`](/docs/landsat7/) |
+| Landsat 5 | [`/docs/landsat5/`](/docs/landsat5/) |
+| Landsat 4 | [`/docs/landsat4/`](/docs/landsat4/) |
+| Sentinel-2 | [`/docs/sentinel2/`](/docs/sentinel2/) |
+| Sentinel-1 | [`/docs/sentinel1/`](/docs/sentinel1/) |
+| MODIS Terra | [`/docs/modis-terra/`](/docs/modis-terra/) |
+| MODIS Aqua | [`/docs/modis-aqua/`](/docs/modis-aqua/) |
+| Copernicus DEM | [`/docs/dem/`](/docs/dem/) |
+| Google Earth Historical | [`/docs/google-earth-historical/`](/docs/google-earth-historical/) |
+| Esri Wayback | [`/docs/esri-wayback/`](/docs/esri-wayback/) |
+| GHS - جمعیت | [`/docs/ghs-pop/`](/docs/ghs-pop/) |
+| GHS - سطح ساخته‌شده | [`/docs/ghs-built/`](/docs/ghs-built/) |
+| GHS - حجم ساخته‌شده | [`/docs/ghs-built-v/`](/docs/ghs-built-v/) |
+| OpenStreetMap | [`/docs/osm/`](/docs/osm/) |
+| Overture Maps | [`/docs/overture/`](/docs/overture/) |
+| هواشناسی | [`/docs/weather/`](/docs/weather/) |
+| زمین‌لرزه‌ها | [`/docs/earthquakes/`](/docs/earthquakes/) |
+
+---
+
 ## ساختار پروژه
 
 ```
@@ -81,11 +113,16 @@ shahrkavi/
 │   └── ...
 ├── css/
 │   └── style.css
+├── docs/                  # مستندات دیتاست‌ها (Markdown)
+│   └── *.md               # فایل‌های مستندات هر دیتاست
 ├── fastapi/
 │   ├── main.py            # نقطه ورود FastAPI
 │   ├── landsat.py         # Landsat/DEM
 │   ├── osm.py             # OpenStreetMap
 │   ├── weather.py         # هواشناسی
+│   ├── docs_router.py     # روتر مستندات
+│   ├── templates/
+│   │   └── docs.html      # قالب صفحات مستندات
 │   └── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml

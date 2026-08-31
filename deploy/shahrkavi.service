@@ -14,10 +14,7 @@ ExecStart=/opt/shahrkavi/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
-ReadWritePaths=/opt/shahrkavi/fastapi/cache /opt/shahrkavi/fastapi/downloads
+ReadWritePaths=/opt/shahrkavi/fastapi/cache /opt/shahrkavi/fastapi/downloads /opt/shahrkavi/fastapi/bin/cache
 
 [Install]
 WantedBy=multi-user.target
