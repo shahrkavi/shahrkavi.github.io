@@ -61,6 +61,11 @@ const ProcessModule = (() => {
             btnEarthquakeExport.addEventListener('click', () => withButtonLoading(btnEarthquakeExport, runEarthquakeExport, 'در حال آماده‌سازی...'));
         }
 
+        const btnGehExport = document.getElementById('btnGehExport');
+        if (btnGehExport) {
+            btnGehExport.addEventListener('click', () => withButtonLoading(btnGehExport, runGehExport, 'در حال ثبت درخواست...'));
+        }
+
         // Listen for result selection
         EventBus.on('result:selected', onResultSelected);
 
@@ -152,6 +157,12 @@ const ProcessModule = (() => {
             return;
         }
 
+        // Google Earth Historical Imagery: direct download, no raster processing
+        if (isGehMode()) {
+            showGehExportMode();
+            return;
+        }
+
         showImageProcessMode();
         updateSelectedSceneDisplay();
         populateProcessScenes();
@@ -181,6 +192,11 @@ const ProcessModule = (() => {
         return (AppState.searchCriteria.dataset || '') === 'OVT';
     }
 
+    function isGehMode() {
+        const ds = (AppState.searchCriteria.dataset || '');
+        return ds === 'GEH' || ds === 'ESRI_WB';
+    }
+
     function showWeatherMode() {
         const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection',
                      'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection',
@@ -208,7 +224,7 @@ const ProcessModule = (() => {
     }
 
     function showEarthquakeExportMode() {
-        const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection', 'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection', 'osmExportSection', 'ovtExportSection', 'heightPointsSettings'];
+        const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection', 'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection', 'osmExportSection', 'ovtExportSection', 'heightPointsSettings', 'gehExportSection'];
         ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
         const section = document.getElementById('earthquakeExportSection');
         if (section) section.style.display = 'block';
@@ -300,7 +316,7 @@ const ProcessModule = (() => {
     function showOvtExportMode() {
         const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection',
                      'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection',
-                     'osmExportSection', 'heightPointsSettings'];
+                     'osmExportSection', 'heightPointsSettings', 'gehExportSection', 'earthquakeExportSection'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
@@ -315,6 +331,78 @@ const ProcessModule = (() => {
                 ? `${toPersianNum(ovt.total)} ساختمان در محدوده انتخابی موجود است. فرمت خروجی را انتخاب کرده و دکمه تبدیل را بزنید.`
                 : 'در حال جستجو... لطفاً صبر کنید یا دوباره جستجو را اجرا کنید.';
         }
+    }
+
+    function showGehExportMode() {
+        const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection',
+                     'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection',
+                     'osmExportSection', 'ovtExportSection', 'earthquakeExportSection', 'heightPointsSettings'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+        const section = document.getElementById('gehExportSection');
+        if (section) section.style.display = 'block';
+
+        const summary = document.getElementById('gehExportSummary');
+        const sel = AppState.selectedGehDate;
+        const c = AppState.searchCriteria;
+        const providerLabel = { tm: 'Google Earth', wayback: 'Esri Wayback' };
+
+        if (summary && sel) {
+            const provName = providerLabel[sel.providerCode] || sel.provider || providerLabel[c.gehProvider] || '--';
+            summary.innerHTML = `<i class="bi bi-calendar text-primary me-1"></i>` +
+                `تاریخ: <strong>${toPersianNum(sel.date)}</strong><br>` +
+                `منبع: ${escapeHtml(provName)} | زوم: ${toPersianNum(sel.zoom || c.gehZoom || 15)}` +
+                (sel.coveragePercent != null ? ` | پوشش: ${toPersianNum(sel.coveragePercent)}%` : '');
+        } else if (summary) {
+            summary.textContent = 'تاریخی انتخاب نشده است. لطفاً ابتدا در تب نتایج یک تاریخ را انتخاب کنید.';
+        }
+
+        const btn = document.getElementById('btnGehExport');
+        if (btn) btn.disabled = !sel;
+    }
+
+    function runGehExport() {
+        const c = AppState.searchCriteria;
+        const sel = AppState.selectedGehDate;
+        if (c.dataset !== 'GEH' && c.dataset !== 'ESRI_WB') {
+            showToast('ابتدا دیتاست تصاویر تاریخی Google Earth را انتخاب کنید', 'warning');
+            return;
+        }
+        if (!sel) {
+            showToast('لطفاً ابتدا یک تاریخ را در تب نتایج انتخاب کنید', 'warning');
+            return;
+        }
+
+        showToast('در حال ارسال درخواست دانلود تصویر تاریخی...', 'info');
+
+        return fetch(`${API_BASE}/geh/download`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                north: c.north, south: c.south, east: c.east, west: c.west,
+                dates: [sel.date],
+                zoom: sel.zoom || c.gehZoom || 15,
+                provider: sel.providerCode || c.gehProvider || 'tm',
+                dateMatch: c.gehDateMatch || 'closest',
+            }),
+        })
+        .then(async res => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || data.message || `خطا (${res.status})`);
+            if (data.job_id) {
+                showToast('درخواست دانلود در صف پردازش قرار گرفت', 'success');
+                setTimeout(() => {
+                    window.location.href = `processing.html?job=${encodeURIComponent(data.job_id)}&source=geh`;
+                }, 800);
+            } else {
+                throw new Error(data.message || 'پاسخ نامعتبر از سرور');
+            }
+        })
+        .catch(err => {
+            showToast('خطا در ثبت درخواست دانلود: ' + err.message, 'error');
+        });
     }
 
     function runOvtExport() {

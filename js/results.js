@@ -34,6 +34,7 @@ const ResultsModule = (() => {
                 else if (isEarthquakeMode() && AppState.earthquakeInfo) renderResults();
                 else if (isDemMode() && AppState.demInfo) renderResults();
                 else if (isGhsMode() && AppState.ghsInfo) renderResults();
+                else if (isGehMode() && AppState.gehInfo) renderResults();
                 else if (allResults.length > 0) renderResults();
             }
         });
@@ -55,6 +56,11 @@ const ResultsModule = (() => {
 
     function isGhsMode() {
         return (AppState.searchCriteria.dataset || '').startsWith('GHS_');
+    }
+
+    function isGehMode() {
+        const ds = (AppState.searchCriteria.dataset || '');
+        return ds === 'GEH' || ds === 'ESRI_WB';
     }
 
     function isEarthquakeMode() {
@@ -128,6 +134,17 @@ const ResultsModule = (() => {
             return;
         }
 
+        if (isGehMode()) {
+            currentResults = allResults.slice();
+            currentPage = 1;
+            AppState.selectedScenes = [];
+            AppState.selectedScene = null;
+            AppState.selectedGehDate = null;
+            setSummaryResults(total, currentResults.length, response.message);
+            renderResults();
+            return;
+        }
+
         // Show all results, newest first (no date grouping)
         allResults.sort((a, b) => new Date(b.date) - new Date(a.date));
         currentResults = allResults.slice();
@@ -176,6 +193,11 @@ const ResultsModule = (() => {
 
         if (isGhsMode()) {
             renderGhsResults();
+            return;
+        }
+
+        if (isGehMode()) {
+            renderGehResults();
             return;
         }
 
@@ -1008,6 +1030,150 @@ const ResultsModule = (() => {
         ghsPreviewObjectUrl = null;
         activeGhsPreviewId = null;
         resetGhsPreviewButtons();
+    }
+
+    // === GEH (Google Earth Historical Imagery) results rendering ===
+
+    let gehActivePreviewId = null;
+
+    function renderGehResults() {
+        MapModule.clearUserLayers();
+        MapModule.clearImageOverlays();
+        gehActivePreviewId = null;
+
+        const rows = currentResults;
+        const countEl = document.getElementById('resultsCount');
+        if (countEl) countEl.textContent = `${toPersianNum(rows.length)} تصویر تاریخی یافت شد`;
+        const badge = document.getElementById('resultsBadge');
+        if (badge) {
+            badge.textContent = toPersianNum(rows.length);
+            badge.style.display = rows.length ? 'inline' : 'none';
+        }
+
+        document.getElementById('dateFilterRow')?.classList.add('d-none');
+        document.getElementById('osmResultsSummary')?.classList.add('d-none');
+        const selCount = document.getElementById('resultsSelectionCount');
+        if (selCount) {
+            selCount.style.display = rows.length ? '' : 'none';
+            selCount.textContent = AppState.selectedGehDate ? '۱ تصویر انتخاب شده' : '۰ تصویر انتخاب شده';
+        }
+        const next = document.getElementById('btnGoProcess');
+        if (next) next.style.display = rows.length ? '' : 'none';
+        const pagination = document.getElementById('resultsPagination');
+        if (pagination) pagination.style.display = 'none';
+
+        const providerLabel = { tm: 'Google Earth', wayback: 'Esri Wayback' };
+        const criteria = AppState.searchCriteria;
+        const providerCode = criteria.dataset === 'ESRI_WB' ? 'wayback' : 'tm';
+        const providerName = providerLabel[criteria.gehProvider || providerCode] || criteria.gehProvider || '--';
+        const summaryText = `${providerName} | زوم ${toPersianNum(criteria.gehZoom || 15)}`;
+
+        const thead = document.querySelector('#resultsTable thead');
+        if (thead) thead.innerHTML = '<tr><th class="col-select">انتخاب</th><th>تاریخ تصویر</th><th>منبع</th><th>پوشش منطقه</th><th>زوم</th><th>وضعیت</th><th>عملیات</th></tr>';
+
+        const resultsHeader = document.querySelector('.results-header .d-flex');
+        if (resultsHeader) {
+            const existingLabel = resultsHeader.querySelector('.geh-summary-label');
+            if (existingLabel) existingLabel.remove();
+            const lbl = document.createElement('span');
+            lbl.className = 'geh-summary-label text-muted small me-2';
+            lbl.textContent = summaryText;
+            resultsHeader.appendChild(lbl);
+        }
+
+        const tbody = document.getElementById('resultsTableBody');
+        if (!tbody) return;
+
+        const providerColors = { tm: 'primary', wayback: 'info' };
+
+        tbody.innerHTML = rows.length
+            ? rows.map((row, idx) => {
+                const dateStr = row.date || '--';
+                const displayDate = isoToJalaliString(dateStr) || dateStr;
+                const provCode = row.providerCode || criteria.gehProvider || providerCode;
+                const prov = row.provider || providerLabel[provCode] || '--';
+                const zoom = row.zoom ?? criteria.gehZoom ?? 15;
+                const iscomplete = row.complete !== false;
+                const providerBadge = providerColors[provCode] || 'secondary';
+                const isSelected = AppState.selectedGehDate?.date === row.date;
+                return `<tr data-scene-id="${escapeHtml(row.id || dateStr)}" class="${isSelected ? 'scene-selected' : ''}">
+                    <td class="col-select">
+                        <input class="form-check-input geh-radio" type="radio" name="gehSelect"
+                               value="${escapeHtml(row.id || dateStr)}" data-idx="${idx}"
+                               aria-label="انتخاب ${escapeHtml(displayDate)}" ${isSelected ? 'checked' : ''}>
+                    </td>
+                    <td class="fw-medium text-nowrap">
+                        ${escapeHtml(displayDate)}
+                        <small class="text-muted d-block" dir="ltr">${escapeHtml(dateStr)}</small>
+                    </td>
+                    <td><span class="badge bg-${providerBadge}">${escapeHtml(prov)}</span></td>
+                    <td class="text-nowrap">
+                        ${toPersianNum(Number(row.coveragePercent ?? 0).toFixed(1))}٪ منطقه
+                    </td>
+                    <td>${toPersianNum(zoom)}</td>
+                    <td>${iscomplete
+                        ? '<span class="badge bg-success">تکمیل</span>'
+                        : '<span class="badge bg-warning text-dark">ناقص</span>'
+                    }</td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary geh-coverage-btn"
+                                data-idx="${idx}" title="نمایش محدوده پوشش روی نقشه"
+                                ${row.coverageGeometry ? '' : 'disabled'}>
+                            <i class="bi bi-bounding-box"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('')
+            : '<tr class="results-empty"><td colspan="7" class="text-center text-muted py-4">تصویر تاریخی یافت نشد</td></tr>';
+
+        tbody.querySelectorAll('.geh-radio').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const feature = rows[parseInt(radio.dataset.idx)];
+                AppState.selectedGehDate = feature;
+                AppState.selectedScenes = feature?.id ? [feature.id] : [];
+                AppState.selectedScene = feature?.id || null;
+                AppState.processSelectionInitialized = true;
+                tbody.querySelectorAll('tr').forEach(tr => tr.classList.remove('table-active'));
+                tbody.querySelectorAll('tr').forEach(tr => tr.classList.remove('scene-selected'));
+                radio.closest('tr').classList.add('scene-selected');
+                if (selCount) {
+                    selCount.style.display = '';
+                    selCount.textContent = '۱ تصویر انتخاب شده';
+                }
+                setSummaryResults(allResults.length, 1);
+                EventBus.emit('result:selected', feature?.id || null);
+            });
+        });
+
+        tbody.querySelectorAll('.geh-coverage-btn:not([disabled])').forEach(button => {
+            button.addEventListener('click', () => {
+                const feature = rows[parseInt(button.dataset.idx)];
+                const visible = MapModule.toggleCoveragePreview(
+                    feature.id || feature.date,
+                    feature.coverageGeometry,
+                );
+                tbody.querySelectorAll('.geh-coverage-btn').forEach(item => {
+                    item.classList.remove('btn-primary');
+                    item.classList.add('btn-outline-primary');
+                });
+                if (visible) {
+                    button.classList.remove('btn-outline-primary');
+                    button.classList.add('btn-primary');
+                }
+            });
+        });
+
+        tbody.querySelectorAll('tr[data-scene-id]').forEach(row => {
+            row.addEventListener('click', event => {
+                if (event.target.closest('input, button, a')) return;
+                const radio = row.querySelector('.geh-radio');
+                if (radio) {
+                    radio.checked = true;
+                    radio.dispatchEvent(new Event('change'));
+                }
+            });
+            row.style.cursor = 'pointer';
+        });
     }
 
     function setDemTableHeader() {

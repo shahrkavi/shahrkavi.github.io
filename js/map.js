@@ -9,6 +9,8 @@ const MapModule = (() => {
     let currentTool = null;
     let drawControl = null;
     let selectionRect = null; // Highlight rectangle for the selected region
+    let coveragePreviewLayer = null;
+    let coveragePreviewId = null;
 
     function bingQuadKey(coords) {
         let quadKey = '';
@@ -425,6 +427,34 @@ const MapModule = (() => {
         return polygon;
     }
 
+    /** Toggle one historical-image coverage geometry on the map. */
+    function toggleCoveragePreview(id, geometry, opts = {}) {
+        if (!map || !geometry) return false;
+
+        if (coveragePreviewLayer && coveragePreviewId === id) {
+            map.removeLayer(coveragePreviewLayer);
+            coveragePreviewLayer = null;
+            coveragePreviewId = null;
+            return false;
+        }
+        if (coveragePreviewLayer) map.removeLayer(coveragePreviewLayer);
+
+        coveragePreviewLayer = L.geoJSON({ type: 'Feature', properties: {}, geometry }, {
+            style: {
+                color: opts.color || '#0d6efd',
+                weight: opts.weight ?? 3,
+                opacity: 0.95,
+                fillColor: opts.fillColor || '#0d6efd',
+                fillOpacity: opts.fillOpacity ?? 0.2,
+            },
+        }).addTo(map);
+        coveragePreviewId = id;
+        if (coveragePreviewLayer.getBounds().isValid()) {
+            map.fitBounds(coveragePreviewLayer.getBounds(), { padding: [20, 20] });
+        }
+        return true;
+    }
+
     /**
      * Toggle a georeferenced preview image over a scene footprint.
      * bounds = [[south, west], [north, east]]. Returns true if now shown.
@@ -584,6 +614,9 @@ const MapModule = (() => {
     function clearUserLayers() {
         userLayers.forEach(layer => map.removeLayer(layer));
         userLayers = [];
+        if (coveragePreviewLayer) map.removeLayer(coveragePreviewLayer);
+        coveragePreviewLayer = null;
+        coveragePreviewId = null;
     }
 
     /**
@@ -630,6 +663,7 @@ const MapModule = (() => {
         clearSelectionBounds,
         fitBounds,
         showFootprint,
+        toggleCoveragePreview,
         showStation,
         clearUserLayers,
         toggleImageOverlay,

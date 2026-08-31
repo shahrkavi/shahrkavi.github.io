@@ -13,6 +13,7 @@ const PROCESS_TYPE_LABELS = {
     'falsecolor': 'تصویر رنگی کاذب (NIR)',
     'custom_band': 'ترکیب سفارشی باندها',
     'overture_export': 'تبدیل ساختمانهای Overture Maps',
+    'geh_download': 'دانلود تصویر تاریخی Google Earth',
 };
 
 const STATUS_TITLES = {
@@ -61,12 +62,13 @@ const ProcessingPage = (() => {
     function getSourceFromUrl() {
         const params = new URLSearchParams(window.location.search);
         const value = params.get('source');
-        return value === 'overture' || value === 'ghs' ? value : 'landsat';
+        return value === 'overture' || value === 'ghs' || value === 'geh' ? value : 'landsat';
     }
 
     function jobApiBase() {
         if (source === 'overture') return `${API_BASE}/overture`;
         if (source === 'ghs') return `${API_BASE}/ghs`;
+        if (source === 'geh') return `${API_BASE}/geh`;
         return `${API_BASE}/landsat`;
     }
 
@@ -91,6 +93,7 @@ const ProcessingPage = (() => {
         const status = job.status || 'queued';
         const isOverture = job.dataset === 'OVT' || source === 'overture';
         const isGhs = source === 'ghs' || String(job.dataset || '').startsWith('GHS_');
+        const isGeh = source === 'geh' || job.dataset === 'GEH';
 
         // Metadata
         document.getElementById('jobIdLabel').textContent = job.job_id || '--';
@@ -103,6 +106,11 @@ const ProcessingPage = (() => {
             document.getElementById('jobSceneCountTitle').textContent = 'تعداد ساختمان';
             document.getElementById('jobSceneCountLabel').textContent =
                 Number.isFinite(job.total_buildings) ? toFaNum(job.total_buildings) + ' ساختمان' : '--';
+        } else if (isGeh) {
+            document.getElementById('jobProcessLabel').textContent = 'دانلود تصویر تاریخی Google Earth';
+            document.getElementById('jobSceneCountTitle').textContent = 'تعداد تایل';
+            document.getElementById('jobSceneCountLabel').textContent =
+                Number.isFinite(job.total_tiles) ? toFaNum(job.total_tiles) + ' تایل' : '--';
         } else {
             document.getElementById('jobProcessLabel').textContent = isGhs
                 ? 'دانلود گروهی رسترها'
@@ -130,7 +138,7 @@ const ProcessingPage = (() => {
                 btnDownload.href = apiUrl(job.download_url);
                 btnDownload.classList.remove('disabled');
                 btnDownload.setAttribute('aria-disabled', 'false');
-                 btnDownload.innerHTML = (isOverture || isGhs) ? '<i class="bi bi-download"></i> دانلود فایل' : '<i class="bi bi-download"></i> دانلود تصویر پردازش‌شده';
+                 btnDownload.innerHTML = (isOverture || isGhs || isGeh) ? '<i class="bi bi-download"></i> دانلود فایل' : '<i class="bi bi-download"></i> دانلود تصویر پردازش‌شده';
             } else {
                 btnDownload.classList.add('disabled');
                 btnDownload.setAttribute('aria-disabled', 'true');
@@ -204,17 +212,20 @@ const ProcessingPage = (() => {
                     'success': '<span class="badge text-bg-success">موفق</span>',
                     'failed': '<span class="badge text-bg-danger">ناموفق</span>',
                 }[j.status] || `<span class="badge text-bg-secondary">${j.status}</span>`;
+                const isGeh = j.dataset === 'GEH';
                 const isOverture = j.dataset === 'OVT';
                 const label = isOverture
                     ? `تبدیل به ${({ shp: 'Shapefile', geojson: 'GeoJSON', gpkg: 'GeoPackage' }[j.format] || j.format || '')}`
                     : (PROCESS_TYPE_LABELS[j.process_type] || j.process_type || 'پردازش');
-                const detail = isOverture
+                const detail = isGeh
+                    ? `${toFaNum((j.scene_ids || []).length)} تصویر`
+                    : isOverture
                     ? `${toFaNum(j.total_buildings)} ساختمان`
                     : `${toFaNum((j.scene_ids || []).length)} صحنه`;
                 const link = j.status === 'success' && j.download_url
                     ? `<a class="small" href="${apiUrl(j.download_url)}"><i class="bi bi-download"></i> دانلود</a>`
                     : (j.status === 'queued' || j.status === 'running')
-                        ? `<a class="small" href="processing.html?job=${encodeURIComponent(j.job_id)}&source=${j.dataset?.startsWith('GHS_') ? 'ghs' : isOverture ? 'overture' : 'landsat'}"><i class="bi bi-arrow-left"></i> پیگیری</a>`
+                        ? `<a class="small" href="processing.html?job=${encodeURIComponent(j.job_id)}&source=${j.dataset === 'GEH' ? 'geh' : j.dataset?.startsWith('GHS_') ? 'ghs' : isOverture ? 'overture' : 'landsat'}"><i class="bi bi-arrow-left"></i> پیگیری</a>`
                         : '';
                 return `
                     <div class="d-flex align-items-center justify-content-between py-2 border-bottom ${active ? 'bg-light rounded px-2' : ''}">

@@ -66,6 +66,8 @@ const AppState = {
     earthquakeInfo: null,
     demInfo: null,  // DEM search summary {count, tiles}
     ghsInfo: null,
+    gehInfo: null,  // Google Earth Historical Imagery search summary
+    selectedGehDate: null,  // Currently selected GEH date feature
     cart: [],
     mapDrawings: null,  // Current map drawing layer reference
     isLoading: false,
@@ -447,6 +449,13 @@ function initWizardNavigation() {
             return true;
         }
         if (dataset.startsWith('GHS_')) return true;
+        if (dataset === 'GEH' || dataset === 'ESRI_WB') {
+            if (!AppState.selectedGehDate) {
+                showToast('لطفاً یک تاریخ از جدول نتایج انتخاب کنید', 'warning');
+                return false;
+            }
+            return true;
+        }
         if (!Array.isArray(AppState.selectedScenes) || AppState.selectedScenes.length === 0) {
             showToast('لطفاً حداقل یک تصویر از جدول نتایج انتخاب کنید', 'warning');
             return false;
@@ -918,11 +927,11 @@ function updateSummary() {
     }
 
     if (SummaryState.results) {
-        html += '<div class="summary-row">'
+        html += '<div class="summary-row">';
         SummaryState.results.forEach(r => {
             html += `<span class="summary-key">${r.label}:</span><span class="summary-value">${r.value}</span>`;
-        html += '</div>'
         });
+        html += '</div>';
     }
 
     body.innerHTML = html;

@@ -37,6 +37,9 @@ server.err.log
 # Cache files
 cache/
 
+# GEHistoricalImagery binary + its cache
+bin/
+
 # Downloaded/processed files (generated at runtime)
 downloads/
 

@@ -249,15 +249,63 @@
                             </div>
                         </div>
                         <form id="queryForm" class="search-form">
+                            <!-- Google Earth Historical Imagery Settings -->
+                            <div class="search-section" id="gehSection" style="display:none">
+                                <h6 class="section-title">
+                                    <i class="bi bi-clock-history"></i> پارامترهای تصویر تاریخی
+                                </h6>
+                                <div class="mb-2">
+                                    <label class="form-label small mb-1" for="gehZoom">سطح زوم (تفکیک مکانی):
+                                        <span class="range-value fw-bold" id="gehZoomValue">۱۵</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="gehZoom" min="10" max="21" step="1" value="15">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="range-value">۱۰</span>
+                                        <span class="range-value">۲۱</span>
+                                    </div>
+                                    <div class="form-text small" id="gehZoomHint"></div>
+                                </div>
+                                <div>
+                                    <label class="form-label small mb-1" for="gehDateMatch">تطبیق تاریخ</label>
+                                    <select class="form-select form-select-sm" id="gehDateMatch">
+                                        <option value="closest" selected>نزدیک‌ترین تصویر به تاریخ انتخابی</option>
+                                        <option value="exact">فقط دقیقاً همان تاریخ</option>
+                                        <option value="closestbefore">نزدیک‌ترین تصویر قبل از تاریخ</option>
+                                        <option value="closestafter">نزدیک‌ترین تصویر بعد از تاریخ</option>
+                                    </select>
+                                </div>
+                            </div>
                             <!-- Date Range Section -->
                             <div class="search-section" id="dateRangeSection">
                                 <h6 class="section-title">
                                     <i class="bi bi-calendar-range"></i> بازه زمانی
                                 </h6>
-                                <div id="jalaliRangeCalendar" class="jalali-range-calendar"></div>
-                                <div class="form-text small mt-1">
-                                    برای تاریخ مشخص یک روز و برای بازه، دو روز را انتخاب کنید؛ روزهای دارای نقطه سبز تصویر موجود دارند.
-                                </div>
+                                 <div id="jalaliRangeCalendar" class="jalali-range-calendar"></div>
+                                 <div id="gehDateRangeSlider" class="geh-date-range-slider" style="display:none;">
+                                     <div id="gehDateRangeLoading" class="geh-date-range-loading" style="display:none;" aria-live="polite">
+                                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                         <span>در حال دریافت تاریخ‌های موجود...</span>
+                                     </div>
+                                     <div class="small text-muted mb-2" id="gehDateRangeStatus">
+                                         در حال دریافت تاریخ‌های موجود...
+                                     </div>
+                                     <div class="geh-date-range-row">
+                                         <label class="form-label small mb-1" for="gehDateRangeStart">از تاریخ</label>
+                                         <input type="range" class="form-range" id="gehDateRangeStart" min="0" max="0" value="0" step="1" disabled>
+                                         <div class="fw-bold small" id="gehDateRangeStartLabel">--</div>
+                                     </div>
+                                     <div class="geh-date-range-row">
+                                         <label class="form-label small mb-1" for="gehDateRangeEnd">تا تاریخ</label>
+                                         <input type="range" class="form-range" id="gehDateRangeEnd" min="0" max="0" value="0" step="1" disabled>
+                                         <div class="fw-bold small" id="gehDateRangeEndLabel">--</div>
+                                     </div>
+                                     <div class="form-text small mt-1">
+                                         بازه فقط بین تاریخ‌های دارای تصویر انتخاب می‌شود.
+                                     </div>
+                                 </div>
+                                 <div class="form-text small mt-1" id="dateRangeHelp">
+                                     برای تاریخ مشخص یک روز و برای بازه، دو روز را انتخاب کنید؛ روزهای دارای نقطه سبز تصویر موجود دارند.
+                                 </div>
                             </div>
 
                             <!-- Cloud Cover Section -->
@@ -283,6 +331,7 @@
                                 <p class="text-muted small mb-2">سال‌های موجود برای هر سه لایه POP، BUILT و BUILT_V را انتخاب کنید.</p>
                                 <div id="ghsYearOptions" class="row g-2"></div>
                             </div>
+
 
                             <!-- OSM Tag Filters Section -->
                             <div class="search-section" id="osmTagSection" style="display:none">
@@ -609,6 +658,22 @@
                                 <option value="csv">CSV</option>
                             </select>
                             <button type="button" class="btn btn-primary btn-sm w-100" id="btnEarthquakeExport"><i class="bi bi-download"></i> دانلود فایل</button>
+                        </div>
+
+                        <!-- Google Earth Historical Imagery Export Section -->
+                        <div class="search-section" id="gehExportSection" style="display:none;">
+                            <h6 class="section-title">
+                                <i class="bi bi-clock-history"></i> دانلود تصویر تاریخی Google Earth
+                            </h6>
+                            <p class="text-muted small mb-2">
+                                تصویر تاریخی محدوده تعریف‌شده در تب «منطقه» برای تاریخ انتخاب‌شده در تب «پارامترها» به‌صورت GeoTIFF ژئورفرنس دانلود می‌شود.
+                            </p>
+                            <div class="small text-muted mb-2" id="gehExportSummary">
+                                تاریخ یا محدوده‌ای انتخاب نشده است.
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm w-100" id="btnGehExport">
+                                <i class="bi bi-download"></i> دانلود GeoTIFF
+                            </button>
                         </div>
 
                         <!-- Run / Download -->

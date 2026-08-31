@@ -38,6 +38,9 @@ fastapi/server.err.log
 # Cache files
 fastapi/cache/
 
+# GEHistoricalImagery binary + its cache (downloaded separately, see fastapi/bin/README)
+fastapi/bin/
+
 # Downloaded/processed files (generated at runtime)
 fastapi/downloads/
 
@@ -74,3 +77,4 @@ opencodes.md
 
 # Local-only landing page draft
 front-page/
+skill-observations/

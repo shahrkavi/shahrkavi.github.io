@@ -22,12 +22,20 @@ const SearchModule = (() => {
         'includeallmagnitudes', 'includearrivals', 'includedeleted', 'includesuperseded', 'eventid', 'producttype', 'idlist',
     ];
     // Datasets whose imagery availability can be highlighted on the calendar
-    const AVAILABLE_DATASETS = new Set(['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'S1', 'MOD', 'MYD']);
+    const AVAILABLE_DATASETS = new Set(['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'S1', 'MOD', 'MYD', 'GEH', 'ESRI_WB']);
     let ghsYears = [];
+
+    // Approximate ground resolution (m/px) of web-mercator tiles by zoom level
+    const GEH_ZOOM_RESOLUTIONS = {
+        10: '۱۵۰ متر', 11: '۷۵ متر', 12: '۳۸ متر', 13: '۱۹ متر', 14: '۹.۵ متر',
+        15: '۴.۸ متر', 16: '۲.۴ متر', 17: '۱.۲ متر', 18: '۶۰ سانتی‌متر', 19: '۳۰ سانتی‌متر',
+        20: '۱۵ سانتی‌متر', 21: '۷.۵ سانتی‌متر',
+    };
 
     let availReqSeq = 0;
     let availDebounceTimer = null;
     let lastVisibleWindow = null;
+    let gehAvailableDates = [];
     let pendingShp = null;
 
     function init() {
@@ -49,6 +57,32 @@ const SearchModule = (() => {
             cloudSlider.value = AppState.searchCriteria.cloudMax;
             cloudValue.textContent = toPersianNum(AppState.searchCriteria.cloudMax) + '٪';
         }
+
+        // Google Earth historical imagery zoom/provider controls
+        const gehZoom = document.getElementById('gehZoom');
+        const gehZoomValue = document.getElementById('gehZoomValue');
+        const gehZoomHint = document.getElementById('gehZoomHint');
+        if (gehZoom) {
+            const updateZoomUi = () => {
+                const val = parseInt(gehZoom.value);
+                if (gehZoomValue) gehZoomValue.textContent = toPersianNum(val);
+                if (gehZoomHint) {
+                    gehZoomHint.textContent = `تفکیک حدودی: ${GEH_ZOOM_RESOLUTIONS[val] || '--'} در هر پیکسل`;
+                }
+                if (AppState.searchCriteria.dataset === 'ESRI_WB' && val > 20) {
+                    gehZoom.value = 20;
+                    if (gehZoomValue) gehZoomValue.textContent = toPersianNum(20);
+                    showToast('حداکثر زوم Esri Wayback برابر ۲۰ است', 'warning');
+                }
+            };
+            gehZoom.addEventListener('input', updateZoomUi);
+            gehZoom.addEventListener('change', scheduleAvailableDatesRefresh);
+            updateZoomUi();
+        }
+        const gehDateRangeStart = document.getElementById('gehDateRangeStart');
+        const gehDateRangeEnd = document.getElementById('gehDateRangeEnd');
+        if (gehDateRangeStart) gehDateRangeStart.addEventListener('input', updateHistoricalSliderLabels);
+        if (gehDateRangeEnd) gehDateRangeEnd.addEventListener('input', updateHistoricalSliderLabels);
 
         // Use map bounds button
         if (btnUseMap) {
@@ -112,8 +146,34 @@ const SearchModule = (() => {
             }
         });
 
-        EventBus.on('dataset:changed', () => {
+        EventBus.on('dataset:changed', (datasetId) => {
             JalaliDatePicker.setAvailableDates([]);
+
+            // Auto-configure GEH provider/zoom based on dataset
+            const gehZoomEl = document.getElementById('gehZoom');
+            const gehZoomValueEl = document.getElementById('gehZoomValue');
+            const isGehFamily = datasetId === 'GEH' || datasetId === 'ESRI_WB';
+            setHistoricalDateControls(isGehFamily);
+
+            if (datasetId === 'ESRI_WB') {
+                if (gehZoomEl && parseInt(gehZoomEl.value) > 20) {
+                    gehZoomEl.value = 20;
+                    if (gehZoomValueEl) gehZoomValueEl.textContent = toPersianNum(20);
+                }
+            }
+            AppState.searchCriteria.gehProvider = datasetId === 'ESRI_WB' ? 'wayback' : datasetId === 'GEH' ? 'tm' : null;
+
+            // Historical imagery needs a wide calendar range to show green dots
+            if (isGehFamily) {
+                const today = new Date();
+                const twentyYearsAgo = new Date(today);
+                twentyYearsAgo.setFullYear(today.getFullYear() - 20);
+                JalaliDatePicker.setRange(
+                    twentyYearsAgo.toISOString().split('T')[0],
+                    today.toISOString().split('T')[0]
+                );
+            }
+
             scheduleAvailableDatesRefresh();
         });
 
@@ -131,6 +191,7 @@ const SearchModule = (() => {
             sixMonthsAgo.toISOString().split('T')[0],
             today.toISOString().split('T')[0]
         );
+        setHistoricalDateControls(isHistoricalDataset());
 
         console.log('Search module initialized');
     }
@@ -436,6 +497,19 @@ const SearchModule = (() => {
         const isOvt = criteria.dataset === 'OVT';
         const isEarthquake = criteria.dataset === 'USGS_EQ';
         const isGhs = criteria.dataset?.startsWith('GHS_');
+        const isGeh = criteria.dataset === 'GEH' || criteria.dataset === 'ESRI_WB';
+
+        if (isGeh) {
+            const selectedRange = getHistoricalDateRange();
+            if (selectedRange) {
+                criteria.dateFrom = selectedRange.start;
+                criteria.dateTo = selectedRange.end;
+            }
+            criteria.gehZoom = parseInt(document.getElementById('gehZoom')?.value) || 15;
+            criteria.gehProvider = criteria.dataset === 'ESRI_WB' ? 'wayback' : 'tm';
+            criteria.gehDateMatch = document.getElementById('gehDateMatch')?.value || 'closest';
+            criteria.cloudMax = null;
+        }
 
         // Buildings query uses only the region - no dates or cloud filter
         if (isOvt) {
@@ -500,6 +574,15 @@ const SearchModule = (() => {
                 showToast('حداکثر تعداد نتایج باید بین ۱ تا ۲۰۰۰۰ باشد', 'warning');
                 return;
             }
+        } else if (isGeh) {
+            if (!criteria.dateFrom || !criteria.dateTo) {
+                showToast('برای تصاویر تاریخی Google Earth، انتخاب تاریخ الزامی است', 'warning');
+                return;
+            }
+            if (criteria.dateFrom > criteria.dateTo) {
+                showToast('تاریخ شروع باید قبل از تاریخ پایان باشد', 'error');
+                return;
+            }
         } else if (criteria.dateFrom && criteria.dateTo && criteria.dateFrom > criteria.dateTo) {
             showToast('تاریخ شروع باید قبل از تاریخ پایان باشد', 'error');
             return;
@@ -554,11 +637,17 @@ const SearchModule = (() => {
                     AppState.earthquakeInfo = response.earthquake || null;
                     AppState.demInfo = response.dem || null;
                     AppState.ghsInfo = response.ghs || null;
+                    AppState.gehInfo = response.geh || null;
+                    AppState.gehResults = response.data || [];
 
                     // Build params summary
                     const params = [];
                     if (criteria.dataset === 'OVT') {
                         params.push({ label: 'منبع', value: 'Overture Maps ساختمانها' });
+                    }
+                    if (criteria.dataset === 'GEH' || criteria.dataset === 'ESRI_WB') {
+                        params.push({ label: 'منبع', value: criteria.gehProvider === 'wayback' ? 'Esri Wayback' : 'Google Earth' });
+                        if (criteria.gehZoom) params.push({ label: 'زوم', value: toPersianNum(criteria.gehZoom) });
                     }
                     if (criteria.dataset === 'USGS_EQ') params.push({ label: 'مرجع', value: 'USGS Earthquake Catalog' });
                     if (criteria.dateFrom) params.push({ label: 'از تاریخ', value: isoToJalaliString(criteria.dateFrom) });
@@ -605,6 +694,11 @@ const SearchModule = (() => {
 
     function scheduleAvailableDatesRefresh() {
         clearTimeout(availDebounceTimer);
+        if (isHistoricalDataset() && readFormBounds()) {
+            gehAvailableDates = [];
+            updateHistoricalSlider();
+            setHistoricalDateLoading(true);
+        }
         availDebounceTimer = setTimeout(refreshAvailableDates, 300);
     }
 
@@ -613,10 +707,15 @@ const SearchModule = (() => {
      * and current region + dataset, then highlight those days.
      */
     function refreshAvailableDates() {
-        if (!lastVisibleWindow) return;
         const bounds = readFormBounds();
         const dataset = AppState.searchCriteria.dataset;
         if (!bounds || !dataset || !AVAILABLE_DATASETS.has(dataset)) return;
+
+        if (dataset === 'GEH' || dataset === 'ESRI_WB') {
+            refreshHistoricalAvailableDates(bounds, dataset);
+            return;
+        }
+        if (!lastVisibleWindow) return;
 
         const seq = ++availReqSeq;
         ApiService.fetchAvailableDates(
@@ -624,7 +723,126 @@ const SearchModule = (() => {
         ).then(dates => {
             if (seq !== availReqSeq) return;   // a newer request superseded this one
             JalaliDatePicker.setAvailableDates(dates);
-        });
+        }).catch(error => console.error('available-dates error:', error));
+    }
+
+    function isHistoricalDataset(dataset = AppState.searchCriteria.dataset) {
+        return dataset === 'GEH' || dataset === 'ESRI_WB';
+    }
+
+    function setHistoricalDateControls(isHistorical) {
+        const calendar = document.getElementById('jalaliRangeCalendar');
+        const slider = document.getElementById('gehDateRangeSlider');
+        const help = document.getElementById('dateRangeHelp');
+        if (calendar) calendar.style.display = isHistorical ? 'none' : '';
+        if (slider) slider.style.display = isHistorical ? 'block' : 'none';
+        if (help) help.style.display = isHistorical ? 'none' : '';
+        if (!isHistorical) {
+            gehAvailableDates = [];
+            updateHistoricalSlider();
+        }
+    }
+
+    function refreshHistoricalAvailableDates(bounds, dataset) {
+        const today = new Date().toISOString().split('T')[0];
+        const options = {
+            zoom: parseInt(document.getElementById('gehZoom')?.value) || 15,
+            provider: dataset === 'ESRI_WB' ? 'wayback' : 'tm',
+        };
+        const seq = ++availReqSeq;
+        gehAvailableDates = [];
+        updateHistoricalSlider();
+        setHistoricalDateLoading(true);
+        ApiService.fetchAvailableDates(bounds, dataset, '1930-01-01', today, options)
+            .then(dates => {
+                if (seq !== availReqSeq) return;
+                gehAvailableDates = [...new Set((dates || []).filter(Boolean))].sort();
+                updateHistoricalSlider();
+                setHistoricalDateLoading(false);
+            })
+            .catch(error => {
+                if (seq === availReqSeq) {
+                    gehAvailableDates = [];
+                    updateHistoricalSlider(`خطا در دریافت تاریخ‌ها: ${error.message}`);
+                    setHistoricalDateLoading(false);
+                }
+            });
+    }
+
+    function updateHistoricalStatus(message) {
+        const status = document.getElementById('gehDateRangeStatus');
+        if (status) status.textContent = message;
+    }
+
+    function setHistoricalDateLoading(isLoading) {
+        const container = document.getElementById('gehDateRangeSlider');
+        const loading = document.getElementById('gehDateRangeLoading');
+        const start = document.getElementById('gehDateRangeStart');
+        const end = document.getElementById('gehDateRangeEnd');
+        if (container) {
+            container.classList.toggle('is-loading', isLoading);
+            container.setAttribute('aria-busy', String(isLoading));
+        }
+        if (loading) loading.style.display = isLoading ? 'flex' : 'none';
+        if (start) start.disabled = isLoading || !gehAvailableDates.length;
+        if (end) end.disabled = isLoading || !gehAvailableDates.length;
+        if (isLoading) updateHistoricalStatus('در حال دریافت همه تاریخ‌های موجود...');
+    }
+
+    function formatHistoricalDate(iso) {
+        if (!iso) return '--';
+        return typeof isoToJalaliString === 'function' ? isoToJalaliString(iso) : iso;
+    }
+
+    function updateHistoricalSlider(errorMessage = null) {
+        const start = document.getElementById('gehDateRangeStart');
+        const end = document.getElementById('gehDateRangeEnd');
+        const startLabel = document.getElementById('gehDateRangeStartLabel');
+        const endLabel = document.getElementById('gehDateRangeEndLabel');
+        if (!start || !end) return;
+
+        const dates = gehAvailableDates;
+        const hasDates = dates.length > 0;
+        const max = Math.max(0, dates.length - 1);
+        start.min = end.min = '0';
+        start.max = end.max = String(max);
+        start.value = '0';
+        end.value = String(max);
+        start.disabled = end.disabled = !hasDates;
+        startLabel.textContent = hasDates ? formatHistoricalDate(dates[0]) : '--';
+        endLabel.textContent = hasDates ? formatHistoricalDate(dates[max]) : '--';
+        updateHistoricalStatus(errorMessage || (hasDates
+            ? `${toPersianNum(dates.length)} تاریخ موجود است`
+            : 'برای این محدوده و منبع، تاریخی موجود نیست.'));
+    }
+
+    function updateHistoricalSliderLabels() {
+        const start = document.getElementById('gehDateRangeStart');
+        const end = document.getElementById('gehDateRangeEnd');
+        const startLabel = document.getElementById('gehDateRangeStartLabel');
+        const endLabel = document.getElementById('gehDateRangeEndLabel');
+        if (!start || !end || !gehAvailableDates.length) return;
+        let startIndex = Number(start.value);
+        let endIndex = Number(end.value);
+        if (startIndex > endIndex) {
+            if (document.activeElement === start) end.value = String(startIndex);
+            else start.value = String(endIndex);
+            startIndex = Number(start.value);
+            endIndex = Number(end.value);
+        }
+        startLabel.textContent = formatHistoricalDate(gehAvailableDates[startIndex]);
+        endLabel.textContent = formatHistoricalDate(gehAvailableDates[endIndex]);
+    }
+
+    function getHistoricalDateRange() {
+        if (!isHistoricalDataset() || !gehAvailableDates.length) return null;
+        const startIndex = Number(document.getElementById('gehDateRangeStart')?.value);
+        const endIndex = Number(document.getElementById('gehDateRangeEnd')?.value);
+        if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) return null;
+        return {
+            start: gehAvailableDates[Math.min(startIndex, endIndex)],
+            end: gehAvailableDates[Math.max(startIndex, endIndex)],
+        };
     }
 
     function readFormBounds() {

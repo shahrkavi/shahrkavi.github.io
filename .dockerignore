@@ -12,6 +12,7 @@ fastapi/.env.*
 fastapi/.env/
 fastapi/cache/
 fastapi/downloads/
+fastapi/bin/
 fastapi/__pycache__/
 **/__pycache__/
 **/*.pyc

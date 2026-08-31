@@ -162,6 +162,11 @@ const ApiService = (() => {
                     return;
                 }
 
+                if (dataset === 'GEH' || dataset === 'ESRI_WB') {
+                    resolve(await searchGeh(criteria));
+                    return;
+                }
+
                 if (dataset === 'OVT') {
                     // Overture Maps buildings search
                     resolve(await searchOvertureBuildings(criteria));
@@ -530,7 +535,7 @@ const ApiService = (() => {
      * Fetch distinct acquisition dates with imagery for region + dataset
      * within the given date window (the months shown in the calendar).
      */
-    function fetchAvailableDates(bounds, dataset, startIso, endIso) {
+    function fetchAvailableDates(bounds, dataset, startIso, endIso, options = {}) {
         return new Promise(async (resolve) => {
             try {
                 const params = new URLSearchParams({
@@ -542,9 +547,16 @@ const ApiService = (() => {
                     start: startIso,
                     end: endIso,
                 });
-                const res = await fetch(`${API_BASE}/landsat/available-dates?${params}`);
-                if (!res.ok) throw new Error(`Server error: ${res.status}`);
-                const data = await res.json();
+                if (dataset === 'GEH' || dataset === 'ESRI_WB') {
+                    if (options.zoom) params.set('zoom', options.zoom);
+                    if (options.provider) params.set('provider', options.provider);
+                }
+                const url = (dataset === 'GEH' || dataset === 'ESRI_WB')
+                    ? `${API_BASE}/geh/available-dates?${params}`
+                    : `${API_BASE}/landsat/available-dates?${params}`;
+                const res = await fetch(url);
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.detail || `Server error: ${res.status}`);
                 resolve(data.success ? (data.dates || []) : []);
             } catch (error) {
                 console.error('available-dates error:', error);
@@ -566,6 +578,21 @@ const ApiService = (() => {
             }));
     }
 
+    function searchGeh(criteria) {
+        const params = new URLSearchParams({
+            north: criteria.north, south: criteria.south, east: criteria.east, west: criteria.west,
+            dateFrom: criteria.dateFrom, dateTo: criteria.dateTo,
+            zoom: criteria.gehZoom || 15,
+            provider: criteria.gehProvider || 'tm',
+            dateMatch: criteria.gehDateMatch || 'closest',
+        });
+        return fetch(`${API_BASE}/geh/search?${params}`)
+            .then(response => response.json().then(data => {
+                if (!response.ok) throw new Error(data.detail || 'خطا در جستجوی تصاویر تاریخی');
+                return data;
+            }));
+    }
+
     /**
      * Generate a download URL (mock)
      */
@@ -578,6 +605,7 @@ const ApiService = (() => {
         search,
         fetchAvailableDates,
         searchGhs,
+        searchGeh,
         getDownloadUrl,
     };
 })();

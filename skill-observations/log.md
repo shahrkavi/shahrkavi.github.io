@@ -28,6 +28,13 @@ No observations at checkpoint 2026-08-29 (uploaded extent-only rendering).
 No observations at checkpoint 2026-08-29 (CRS-aware region extent).
 No observations at checkpoint 2026-08-29 (standalone SHP PRJ selection).
 No observations at checkpoint 2026-08-29 (local front page landing design).
+No observations at checkpoint 2026-08-31 (historical imagery date-range slider).
 No observations at checkpoint 2026-08-29 (minimal Bootstrap RTL front page revision).
 No observations at checkpoint 2026-08-29 (creative data pulse card revision).
 No observations at checkpoint 2026-08-30 (local GHS raster dataset integration).
+No observations at checkpoint 2026-08-31 (historical provider selector removal).
+No observations at checkpoint 2026-08-31 (GEH availability request diagnosis).
+No observations at checkpoint 2026-08-31 (historical zoom loading state).
+No observations at checkpoint 2026-08-31 (historical results UI alignment).
+No observations at checkpoint 2026-08-31 (historical coverage footprint preview).
+No observations at checkpoint 2026-08-31 (Docker deployment readiness fix).

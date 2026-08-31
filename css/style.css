@@ -450,6 +450,38 @@ html, body {
     color: var(--text-muted);
 }
 
+.geh-date-range-slider {
+    position: relative;
+    padding: 8px 4px 2px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-muted, transparent);
+}
+
+.geh-date-range-slider.is-loading > :not(.geh-date-range-loading) {
+    opacity: 0.35;
+}
+
+.geh-date-range-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--surface, #fff) 82%, transparent);
+}
+
+.geh-date-range-row + .geh-date-range-row {
+    margin-top: 8px;
+}
+
+.geh-date-range-row .form-range {
+    margin-bottom: 0;
+}
+
 /* Form Label */
 .form-label {
     font-size: 0.75rem;

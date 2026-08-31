@@ -16,6 +16,8 @@ const DatasetsModule = (() => {
         { id: 'MOD', name: 'MODIS Terra Surface Reflectance', info: '2000-اکنون | 500 متر | 8 روزه', category: 'MODIS' },
         { id: 'MYD', name: 'MODIS Aqua Surface Reflectance', info: '2002-اکنون | 500 متر | 8 روزه', category: 'MODIS' },
         { id: 'DEM', name: 'Copernicus DEM GLO-30', info: 'دادههای ارتفاعی | 30 متر | کل جهان', category: 'DEMs' },
+        { id: 'GEH', name: 'تصاویر تاریخی Google Earth', info: 'GEHistoricalImagery | ۱۹۳۰ تا اکنون | تا زوم ۲۱ | GeoTIFF', category: 'HistSatellite' },
+        { id: 'ESRI_WB', name: 'Esri World Atlas Wayback', info: 'تصاویر تاریخی Esri | ۱۹۳۰ تا اکنون | تا زوم ۲۰ | GeoTIFF', category: 'HistSatellite' },
         { id: 'GHS_POP', name: 'Global Human Settlement (GHS)', info: 'POP | جمعیت | ۱۰۰ متر | ۱۹۷۵ تا ۲۰۳۰', category: 'GHS' },
         { id: 'GHS_BUILT', name: 'Global Human Settlement (GHS)', info: 'BUILT | سطح ساخته‌شده | ۱۰۰ متر | ۱۹۷۵ تا ۲۰۳۰', category: 'GHS' },
         { id: 'GHS_BUILT_V', name: 'Global Human Settlement (GHS)', info: 'BUILT_V | حجم ساخته‌شده | ۱۰۰ متر | ۱۹۷۵ تا ۲۰۳۰', category: 'GHS' },
@@ -39,6 +41,7 @@ const DatasetsModule = (() => {
         MODIS: { label: 'مودیس', icon: 'bi-circle-half' },
         DEMs: { label: 'مدل‌های ارتفاعی', icon: 'bi-layers' },
         GHS: { label: 'Global Human Settlement', icon: 'bi-buildings' },
+        HistSatellite: { label: 'تصاویر ماهواره‌ای تاریخی', icon: 'bi-clock-history' },
         OSM: { label: 'داده‌های برداری', icon: 'bi-signpost-2' },
         هواشناسی: { label: 'هواشناسی', icon: 'bi-cloud-sun' },
     };
@@ -55,6 +58,8 @@ const DatasetsModule = (() => {
         'MOD': ['red', 'green', 'blue', 'nir', 'swir16', 'swir22'],
         'MYD': ['red', 'green', 'blue', 'nir', 'swir16', 'swir22'],
         'DEM': ['dem'],
+        'GEH': [],
+        'ESRI_WB': [],
         'GHS_POP': ['pop'],
         'GHS_BUILT': ['built'],
         'GHS_BUILT_V': ['built_v'],
@@ -144,6 +149,12 @@ const DatasetsModule = (() => {
                     { id: 'sub-sentinel', name: 'سنتینل', categoryIcon: 'bi-satellite', children: datasetChildren('Sentinel') },
                     { id: 'sub-modis', name: 'مودیس', categoryIcon: 'bi-circle-half', children: datasetChildren('MODIS') },
                     { id: 'sub-dem', name: 'مدل‌های ارتفاعی', categoryIcon: 'bi-layers', children: datasetChildren('DEMs') },
+                    {
+                        id: 'sub-hist-sat',
+                        name: 'تصاویر ماهواره‌ای تاریخی',
+                        categoryIcon: 'bi-clock-history',
+                        children: datasetChildren('HistSatellite'),
+                    },
                     {
                         id: 'sub-ghs',
                         name: 'Global Human Settlement',
@@ -437,6 +448,7 @@ const DatasetsModule = (() => {
         const osmSection = document.getElementById('osmTagSection');
         const earthquakeSection = document.getElementById('earthquakeSection');
         const ghsSection = document.getElementById('ghsYearSection');
+        const gehSection = document.getElementById('gehSection');
         if (!cloudSection) return;
 
         if (!datasetId) {
@@ -446,6 +458,7 @@ const DatasetsModule = (() => {
             if (osmSection) osmSection.style.display = 'none';
             if (earthquakeSection) earthquakeSection.style.display = 'none';
             if (ghsSection) ghsSection.style.display = 'none';
+            if (gehSection) gehSection.style.display = 'none';
             return;
         }
 
@@ -455,15 +468,17 @@ const DatasetsModule = (() => {
         const isOvt = datasetId === 'OVT';
         const isEarthquake = datasetId === 'USGS_EQ';
         const isGhs = datasetId?.startsWith('GHS_');
+        const isGeh = datasetId === 'GEH' || datasetId === 'ESRI_WB';
         if (isEarthquake && typeof JalaliDatePicker !== 'undefined') {
             JalaliDatePicker.clear();
             JalaliDatePicker.showRecentMonths();
         }
         const supportsCloud = CLOUD_CAPABLE.has(datasetId);
 
-        cloudSection.style.display = (isOsm || isWeather || isDem || isGhs || isOvt || isEarthquake) ? 'none' : (supportsCloud ? 'block' : 'none');
+        const noCloud = isOsm || isWeather || isDem || isGhs || isOvt || isEarthquake || isGeh;
+        cloudSection.style.display = noCloud ? 'none' : (supportsCloud ? 'block' : 'none');
         if (cloudNote) {
-            cloudNote.style.display = (isOsm || isWeather || isDem || isGhs || isOvt || isEarthquake) ? 'none' : (supportsCloud ? 'none' : 'block');
+            cloudNote.style.display = noCloud ? 'none' : (supportsCloud ? 'none' : 'block');
         }
         if (dateSection) {
             dateSection.style.display = (isOsm || isDem || isGhs || isOvt) ? 'none' : 'block';
@@ -473,6 +488,7 @@ const DatasetsModule = (() => {
         }
         if (earthquakeSection) earthquakeSection.style.display = isEarthquake ? 'block' : 'none';
         if (ghsSection) ghsSection.style.display = isGhs ? 'block' : 'none';
+        if (gehSection) gehSection.style.display = isGeh ? 'block' : 'none';
         if (isGhs && typeof SearchModule !== 'undefined' && SearchModule.loadGhsYears) SearchModule.loadGhsYears();
     }
 
