@@ -27,14 +27,18 @@
     <header class="app-header">
         <div class="container-fluid d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center gap-3">
-                <img src="assets/logo.png" alt="شهرکاوی" class="app-logo" onerror="this.style.display='none'">
+                <img src="assets/logo.png" alt="شهرکاوی" class="app-logo" onerror="this.style.display='none'" style="filter: invert(100%);">
                 <div>
                     <h1 class="app-title">شهرکاوی</h1>
                     <p class="app-subtitle">سامانه جستجو و پردازش داده‌های مکانی</p>
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <button class="btn btn-outline-light btn-sm" id="btnHelp" title="راهنما">
+                <a class="btn btn-outline-dark btn-sm pt-2" href="https://doc.shahrkavi.ir/">
+                    <i class="bi bi-book"></i>
+                    <span class="d-none d-md-inline me-1">مستندات</span>
+                </a>
+                <button class="btn btn-outline-dark btn-sm" id="btnHelp" title="راهنما">
                     <i class="bi bi-question-circle"></i>
                     <span class="d-none d-md-inline me-1">راهنما</span>
                 </button>

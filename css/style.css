@@ -46,8 +46,8 @@ html, body {
 /* --- Header --- */
 .app-header {
     height: var(--header-height);
-    background: linear-gradient(135deg, #1a3a4a 0%, #1a5276 50%, #1a6e50 100%);
-    color: #fff;
+    /* background: linear-gradient(135deg, #1a3a4a 0%, #1a5276 50%, #1a6e50 100%); */
+    color: #111;
     padding: 0 16px;
     display: flex;
     align-items: center;
@@ -1894,7 +1894,7 @@ body {
 }
 
 .app-header {
-    background: linear-gradient(120deg, #142c43 0%, #145273 58%, #18725f 100%);
+    /* background: linear-gradient(120deg, #142c43 0%, #145273 58%, #18725f 100%); */
     box-shadow: 0 4px 18px rgba(12, 31, 50, 0.2);
 }
 
