@@ -16,6 +16,10 @@ const ApiService = (() => {
         'S3': { name: 'Sentinel-3', fullName: 'Sentinel-3 OLCI', resolution: '۳۰۰ متر' },
         'MOD': { name: 'MODIS', fullName: 'Terra MODIS', resolution: '۲۵۰ متر' },
         'MYD': { name: 'MODIS', fullName: 'Aqua MODIS', resolution: '۲۵۰ متر' },
+        'MOD_LST': { name: 'MODIS LST', fullName: 'MODIS Land Surface Temperature', resolution: '۱ کیلومتر' },
+        'MOD_VI': { name: 'MODIS VI', fullName: 'MODIS Vegetation Indices', resolution: '۲۵۰ متر' },
+        'MOD_SNOW': { name: 'MODIS Snow', fullName: 'MODIS Snow Cover', resolution: '۵۰۰ متر' },
+        'MOD_LAI': { name: 'MODIS LAI', fullName: 'MODIS Leaf Area Index', resolution: '۵۰۰ متر' },
         'AST': { name: 'ASTER', fullName: 'Terra ASTER', resolution: '۱۵ متر' },
         'SRTM': { name: 'SRTM', fullName: 'SRTM Digital Elevation Model', resolution: '۳۰ متر' },
         'ALOS': { name: 'ALOS', fullName: 'ALOS PALSAR', resolution: '۱۲.۵ متر' },
@@ -174,7 +178,7 @@ const ApiService = (() => {
                 }
 
                 // Supported dataset codes
-                const supportedCodes = ['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'S1', 'MOD', 'MYD', 'DEM'];
+                const supportedCodes = ['L4', 'L5', 'L7', 'L8', 'L9', 'S2', 'S1', 'MOD', 'MYD', 'MOD_LST', 'MOD_VI', 'MOD_SNOW', 'MOD_LAI', 'DEM'];
 
                 if (!supportedCodes.includes(dataset)) {
                     resolve({

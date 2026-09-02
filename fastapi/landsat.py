@@ -77,6 +77,10 @@ DATASET_CONFIGS: Dict[str, dict] = {
             "family": "sentinel1", "id_prefix": None},
     "MOD": {"collection": "modis-09A1-061", "platforms": [], "family": "modis", "id_prefix": "MOD09A1"},
     "MYD": {"collection": "modis-09A1-061", "platforms": [], "family": "modis", "id_prefix": "MYD09A1"},
+    "MOD_LST": {"collection": "modis-11A1-061", "platforms": [], "family": "modis_lst", "id_prefix": "MOD11A1"},
+    "MOD_VI": {"collection": "modis-13Q1-061", "platforms": [], "family": "modis_vi", "id_prefix": "MOD13Q1"},
+    "MOD_SNOW": {"collection": "modis-10A1-061", "platforms": [], "family": "modis_snow", "id_prefix": "MOD10A1"},
+    "MOD_LAI": {"collection": "modis-15A2H-061", "platforms": [], "family": "modis_lai", "id_prefix": "MCD15A2H"},
     "DEM": {"collection": "cop-dem-glo-30", "platforms": [], "family": "dem", "id_prefix": None},
 }
 
@@ -91,6 +95,14 @@ FAMILY_META = {
     "sentinel1": {"name": "Sentinel-1", "fullName": "Sentinel-1 SAR GRD",
                   "resolution": "۱۰ متر"},
     "modis":     {"name": "MODIS",     "fullName": "MODIS 8-Day Surface Reflectance",
+                  "resolution": "۵۰۰ متر"},
+    "modis_lst": {"name": "MODIS",     "fullName": "MODIS Land Surface Temperature/Emissivity Daily",
+                  "resolution": "۱ کیلومتر"},
+    "modis_vi":  {"name": "MODIS",     "fullName": "MODIS Vegetation Indices 16-Day",
+                  "resolution": "۲۵۰ متر"},
+    "modis_snow":{"name": "MODIS",     "fullName": "MODIS Snow Cover Daily",
+                  "resolution": "۵۰۰ متر"},
+    "modis_lai": {"name": "MODIS",     "fullName": "MODIS Leaf Area Index/FPAR 8-Day",
                   "resolution": "۵۰۰ متر"},
     "dem":       {"name": "Copernicus DEM", "fullName": "Copernicus DEM GLO-30",
                   "resolution": "۳۰ متر"},
@@ -119,6 +131,25 @@ FAMILY_BAND_MAP: Dict[str, Dict[str, str]] = {
         "blue": "sur_refl_b03", "green": "sur_refl_b04",
         "swir16": "sur_refl_b06", "swir22": "sur_refl_b07",
     },
+    "modis_lst": {
+        "lst_day": "LST_Day_1km", "lst_night": "LST_Night_1km",
+        "emis_31": "Emis_31", "emis_32": "Emis_32",
+    },
+    "modis_vi": {
+        "ndvi": "250m_16_days_NDVI", "evi": "250m_16_days_EVI",
+        "red_ref": "250m_16_days_red_reflectance",
+        "nir_ref": "250m_16_days_NIR_reflectance",
+        "blue_ref": "250m_16_days_blue_reflectance",
+        "mir_ref": "250m_16_days_MIR_reflectance",
+    },
+    "modis_snow": {
+        "ndsi_snow_cover": "NDSI_Snow_Cover",
+        "snow_albedo": "Snow_Albedo_Daily_Tile",
+        "ndsi": "NDSI",
+    },
+    "modis_lai": {
+        "lai": "Lai_500m", "fpar": "Fpar_500m",
+    },
     "dem": {
         "dem": "data",
     },
@@ -128,6 +159,10 @@ FAMILY_BAND_MAP: Dict[str, Dict[str, str]] = {
 DEFAULT_CALIBRATION: Dict[str, tuple] = {
     "sentinel2": (0.0001, -0.1),
     "modis":     (0.0001, 0.0),
+    "modis_lst":  (0.02, 0.0),
+    "modis_vi":   (0.0001, 0.0),
+    "modis_snow": (1.0, 0.0),
+    "modis_lai":  (0.1, 0.0),
 }
 
 # Spectral assets offered in the download modal, per family
@@ -139,6 +174,12 @@ FAMILY_DOWNLOAD_ASSETS: Dict[str, List[str]] = {
     "sentinel1": ["vv", "vh", "hh", "hv"],
     "modis": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04",
               "sur_refl_b05", "sur_refl_b06", "sur_refl_b07"],
+    "modis_lst": ["LST_Day_1km", "LST_Night_1km", "Emis_31", "Emis_32"],
+    "modis_vi": ["250m_16_days_NDVI", "250m_16_days_EVI",
+                 "250m_16_days_red_reflectance", "250m_16_days_NIR_reflectance",
+                 "250m_16_days_blue_reflectance", "250m_16_days_MIR_reflectance"],
+    "modis_snow": ["NDSI_Snow_Cover", "Snow_Albedo_Daily_Tile", "NDSI"],
+    "modis_lai": ["Lai_500m", "Fpar_500m"],
     "dem": ["data"],
 }
 
@@ -187,6 +228,25 @@ BAND_LABELS = {
     "sur_refl_b05": "SWIR 1230-1250nm",
     "sur_refl_b06": "SWIR 1628-1652nm",
     "sur_refl_b07": "SWIR 2105-2155nm",
+    # MODIS LST
+    "LST_Day_1km": "دما روز (LST Day) Kelvin",
+    "LST_Night_1km": "دما شب (LST Night) Kelvin",
+    "Emis_31": "امیتنس باند 31 (11μm)",
+    "Emis_32": "امیتنس باند 32 (12μm)",
+    # MODIS Vegetation Indices
+    "250m_16_days_NDVI": "شاخص پوشش گیاهی (NDVI)",
+    "250m_16_days_EVI": "شاخص پوشش گیاهی بهبودیافته (EVI)",
+    "250m_16_days_red_reflectance": "بازتاب قرمز (Red Reflectance)",
+    "250m_16_days_NIR_reflectance": "بازتاب مادون قرمز (NIR Reflectance)",
+    "250m_16_days_blue_reflectance": "بازتاب آبی (Blue Reflectance)",
+    "250m_16_days_MIR_reflectance": "بازتاب مادون قرمز میانی (MIR Reflectance)",
+    # MODIS Snow Cover
+    "NDSI_Snow_Cover": "پوشش برف (NDSI Snow Cover)",
+    "Snow_Albedo_Daily_Tile": " albido برف (Snow Albedo)",
+    "NDSI": "شاخص برف (NDSI)",
+    # MODIS LAI
+    "Lai_500m": "شاخص سطح برگ (LAI)",
+    "Fpar_500m": "کسر تابش فتوسنتزی (FPAR)",
     # DEM
     "data": "ارتفاع (Elevation DEM)",
 }
@@ -249,6 +309,14 @@ def detect_family(scene_id: str) -> str:
         return "sentinel2"
     if sid.startswith("S1"):
         return "sentinel1"
+    if sid.startswith("MOD11") or sid.startswith("MYD11"):
+        return "modis_lst"
+    if sid.startswith("MOD13") or sid.startswith("MYD13"):
+        return "modis_vi"
+    if sid.startswith("MOD10") or sid.startswith("MYD10"):
+        return "modis_snow"
+    if sid.startswith("MCD15"):
+        return "modis_lai"
     if sid.startswith(("MOD", "MYD")):
         return "modis"
     if sid.startswith("COP"):
@@ -290,6 +358,8 @@ def map_asset_key(key: str, family: str = "landsat") -> str:
             return USGS_TO_MPC_ASSETS[key]
         lower_map = {k.lower(): v for k, v in USGS_TO_MPC_ASSETS.items()}
         return lower_map.get(key.lower(), key)
+    if family in ("modis_lst", "modis_vi", "modis_snow", "modis_lai"):
+        return key
     if family == "dem":
         # DEM stores elevation in the "data" asset
         if key in ("dem", "elevation", "data", "tiff"):
@@ -584,6 +654,11 @@ def extract_tile(family: str, props: dict, item_id: str) -> Tuple[Any, Any]:
         if m:
             return int(m.group(1)), m.group(2)
         return 0, 0
+    if family in ("modis_lst", "modis_vi", "modis_snow", "modis_lai"):
+        m = re.search(r"\.A\d+\.h(\d+)v(\d+)", item_id)
+        if m:
+            return int(m.group(1)), m.group(2)
+        return 0, 0
     return 0, 0
 
 
@@ -603,6 +678,13 @@ def stac_item_to_scene(item: dict, dataset_code: str) -> dict:
         is_aqua = item_id.startswith("MYD")
         name = "MODIS Aqua" if is_aqua else "MODIS Terra"
         full_name = f"{name} 8-Day Surface Reflectance"
+    elif family in ("modis_lst", "modis_vi", "modis_snow"):
+        is_aqua = item_id.startswith("MYD")
+        name = "MODIS Aqua" if is_aqua else "MODIS Terra"
+        full_name = f"{name} {sat_meta['fullName'].replace('MODIS ', '')}"
+    elif family == "modis_lai":
+        name = "MODIS"
+        full_name = sat_meta["fullName"]
     elif family == "sentinel2":
         plat = str(props.get("platform", "")).replace("Sentinel-", "")
         full_name = f"Sentinel-2 MSI L2A ({plat})"
