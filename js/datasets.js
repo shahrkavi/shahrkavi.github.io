@@ -196,27 +196,18 @@ const DatasetsModule = (() => {
                 id: 'main-vector',
                 name: 'داده‌های برداری',
                 categoryIcon: 'bi-bezier2',
-                children: [
-                    { id: 'sub-osm', name: 'OpenStreetMap', categoryIcon: 'bi-signpost-2', children: datasetChildren('OSM') },
-                ],
-                subcategories: true,
+                children: datasetChildren('OSM'),
+                subcategories: false,
             },
             {
                 id: 'main-timeseries',
                 name: 'داده‌های سری زمانی',
                 categoryIcon: 'bi-graph-up-arrow',
-                children: [
-                    { id: 'sub-weather', name: 'ایستگاه‌های هواشناسی', categoryIcon: 'bi-cloud-sun', children: datasetChildren('هواشناسی') },
-                    { id: 'sub-earthquakes', name: 'زمین‌لرزه‌ها', categoryIcon: 'bi-activity', children: datasetChildren('سری زمانی') },
-                ],
-                subcategories: true,
+                children: [...datasetChildren('هواشناسی'), ...datasetChildren('سری زمانی')],
+                subcategories: false,
             }
         );
 
-        // Overture is a vector dataset but uses its own category label.
-        const vector = groups.find(group => group.id === 'main-vector');
-        vector.children.push({ id: 'sub-buildings', name: 'ساختمان‌ها', categoryIcon: 'bi-buildings', children: datasetChildren('OSM').filter(ds => ds.id === 'OVT') });
-        vector.children[0].children = vector.children[0].children.filter(ds => ds.id !== 'OVT');
         return groups;
     }
 
