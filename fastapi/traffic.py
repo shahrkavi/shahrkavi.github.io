@@ -456,6 +456,12 @@ def export(request: TrafficExportRequest, background_tasks: BackgroundTasks):
     }
 
 
+@router.get("/jobs")
+def list_jobs():
+    jobs = sorted(TRAFFIC_JOBS.values(), key=lambda j: j.get("created_at") or "", reverse=True)
+    return {"jobs": jobs, "total": len(jobs)}
+
+
 @router.get("/jobs/{job_id}")
 def get_job(job_id: str):
     job = TRAFFIC_JOBS.get(job_id)
