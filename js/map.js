@@ -83,6 +83,7 @@ const MapModule = (() => {
 
     // Additional layers storage
     let userLayers = [];
+    let trafficLayerGroup = null;
 
     // Scene preview overlays (scene id -> L.imageOverlay)
     let imageOverlays = {};
@@ -524,10 +525,12 @@ const MapModule = (() => {
     let osmPreviewLayer = null;
     let osmPreviewId = null;
 
-    function escapeHtmlText(str) {
+function escapeHtmlText(str) {
         return String(str ?? '').replace(/[&<>"']/g,
-            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            c => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": "'" }[c]));
     }
+    // Alias for compatibility
+    const escapeHtml = escapeHtmlText;
 
     function osmPopupHtml(props) {
         const rows = ['name', 'name:en'].filter(k => props[k]).map(k =>
@@ -617,6 +620,48 @@ const MapModule = (() => {
         if (coveragePreviewLayer) map.removeLayer(coveragePreviewLayer);
         coveragePreviewLayer = null;
         coveragePreviewId = null;
+        if (trafficLayerGroup) map.removeLayer(trafficLayerGroup);
+        trafficLayerGroup = null;
+    }
+
+    function showTrafficCounters(counters, selectedRouteCodes = []) {
+        console.log('[showTrafficCounters] called with', counters?.length || 0, 'counters');
+        if (!map) {
+            console.warn('Map not initialized, cannot show traffic counters');
+            return;
+        }
+        // Ensure map container has valid size
+        if (map.getSize().x === 0 || map.getSize().y === 0) {
+            map.invalidateSize();
+        }
+        if (trafficLayerGroup) map.removeLayer(trafficLayerGroup);
+        trafficLayerGroup = L.layerGroup().addTo(map);
+        const selected = new Set(selectedRouteCodes.map(Number));
+        const bounds = [];
+        (counters || []).forEach(counter => {
+            const lat = Number(counter.latitude);
+            const lng = Number(counter.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+            bounds.push([lat, lng]);
+            const marker = L.circleMarker([lat, lng], {
+                radius: selected.has(Number(counter.route_code)) ? 9 : 7,
+                color: selected.has(Number(counter.route_code)) ? '#0d6efd' : '#dc3545',
+                weight: 2,
+                fillOpacity: 0.85,
+            });
+            marker.bindPopup(`<strong>${escapeHtml(counter.name || counter.route_name || '')}</strong><br>` +
+                `کد مسیر: ${escapeHtml(String(counter.route_code))}<br>` +
+                `رکورد روزانه: ${toPersianNum(counter.daily_record_count || 0)}`);
+            marker.addTo(trafficLayerGroup);
+        });
+        if (bounds.length && !trafficLayerGroup._trafficFitted) {
+            try {
+                map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+                trafficLayerGroup._trafficFitted = true;
+            } catch (e) {
+                console.warn('fitBounds failed for traffic markers:', e);
+            }
+        }
     }
 
     /**
@@ -665,6 +710,7 @@ const MapModule = (() => {
         showFootprint,
         toggleCoveragePreview,
         showStation,
+        showTrafficCounters,
         clearUserLayers,
         toggleImageOverlay,
         toggleTileJsonOverlay,

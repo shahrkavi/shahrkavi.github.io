@@ -62,13 +62,14 @@ const ProcessingPage = (() => {
     function getSourceFromUrl() {
         const params = new URLSearchParams(window.location.search);
         const value = params.get('source');
-        return value === 'overture' || value === 'ghs' || value === 'geh' ? value : 'landsat';
+        return value === 'overture' || value === 'ghs' || value === 'geh' || value === 'traffic' ? value : 'landsat';
     }
 
     function jobApiBase() {
         if (source === 'overture') return `${API_BASE}/overture`;
         if (source === 'ghs') return `${API_BASE}/ghs`;
         if (source === 'geh') return `${API_BASE}/geh`;
+        if (source === 'traffic') return `${API_BASE}/traffic-counters`;
         return `${API_BASE}/landsat`;
     }
 
@@ -85,7 +86,7 @@ const ProcessingPage = (() => {
         document.getElementById('jobNotFound').classList.remove('d-none');
     }
 
-    function showJob(job) {
+function showJob(job) {
         document.getElementById('jobLoading').classList.add('d-none');
         document.getElementById('jobNotFound').classList.add('d-none');
         document.getElementById('jobBody').classList.remove('d-none');
@@ -94,6 +95,7 @@ const ProcessingPage = (() => {
         const isOverture = job.dataset === 'OVT' || source === 'overture';
         const isGhs = source === 'ghs' || String(job.dataset || '').startsWith('GHS_');
         const isGeh = source === 'geh' || job.dataset === 'GEH';
+        const isTraffic = source === 'traffic' || job.dataset === 'TRAFFIC_COUNTER';
 
         // Metadata
         document.getElementById('jobIdLabel').textContent = job.job_id || '--';
@@ -111,6 +113,12 @@ const ProcessingPage = (() => {
             document.getElementById('jobSceneCountTitle').textContent = 'تعداد تایل';
             document.getElementById('jobSceneCountLabel').textContent =
                 Number.isFinite(job.total_tiles) ? toFaNum(job.total_tiles) + ' تایل' : '--';
+        } else if (isTraffic) {
+            const fmtTitle = { shp: 'Shapefile (ZIP)', geojson: 'GeoJSON', csv: 'CSV' }[job.format] || job.format || '--';
+            document.getElementById('jobProcessLabel').textContent = `تبدیل به ${fmtTitle}`;
+            document.getElementById('jobSceneCountTitle').textContent = 'تعداد شمارنده';
+            document.getElementById('jobSceneCountLabel').textContent =
+                Number.isFinite(job.total_counters) ? toFaNum(job.total_counters) + ' شمارنده' : '--';
         } else {
             document.getElementById('jobProcessLabel').textContent = isGhs
                 ? 'دانلود گروهی رسترها'
@@ -138,7 +146,7 @@ const ProcessingPage = (() => {
                 btnDownload.href = apiUrl(job.download_url);
                 btnDownload.classList.remove('disabled');
                 btnDownload.setAttribute('aria-disabled', 'false');
-                 btnDownload.innerHTML = (isOverture || isGhs || isGeh) ? '<i class="bi bi-download"></i> دانلود فایل' : '<i class="bi bi-download"></i> دانلود تصویر پردازش‌شده';
+                 btnDownload.innerHTML = (isOverture || isGhs || isGeh || isTraffic) ? '<i class="bi bi-download"></i> دانلود فایل' : '<i class="bi bi-download"></i> دانلود تصویر پردازش‌شده';
             } else {
                 btnDownload.classList.add('disabled');
                 btnDownload.setAttribute('aria-disabled', 'true');

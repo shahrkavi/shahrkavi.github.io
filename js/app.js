@@ -46,6 +46,7 @@ const AppState = {
     selectedScene: null,  // Single selected scene ID for processing
     selectedScenes: [],   // Multiple scene IDs used for mosaics and processing
     selectedOsmLayers: [], // Names of the OSM layers selected for export/processing
+    selectedTrafficCounters: [], // Route codes selected for traffic export
     processSelectionInitialized: false,
     selectedResultDate: 'all',
     searchCriteria: {
@@ -63,6 +64,7 @@ const AppState = {
     osmInfo: null,  // OSM search summary {count, truncated, download_url}
     overtureInfo: null,  // Overture Maps buildings summary {total, truncated, download_url}
     weatherInfo: null,  // Weather search summary {count, stations}
+    trafficInfo: null,  // Traffic counter search results
     earthquakeInfo: null,
     demInfo: null,  // DEM search summary {count, tiles}
     ghsInfo: null,
@@ -436,6 +438,13 @@ function initWizardNavigation() {
             return true;
         }
         if (dataset === 'USGS_EQ') return true;
+        if (dataset === 'TRAFFIC_COUNTER') {
+            if (!Array.isArray(AppState.selectedTrafficCounters) || AppState.selectedTrafficCounters.length === 0) {
+                showToast('لطفاً حداقل یک شمارنده ترافیکی انتخاب کنید', 'warning');
+                return false;
+            }
+            return true;
+        }
         if (dataset === 'OVT') {
             // Overture buildings have no selection step either.
             return true;

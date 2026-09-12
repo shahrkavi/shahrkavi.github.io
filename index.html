@@ -311,10 +311,28 @@
                                          بازه فقط بین تاریخ‌های دارای تصویر انتخاب می‌شود.
                                      </div>
                                  </div>
-                                 <div class="form-text small mt-1" id="dateRangeHelp">
-                                     برای تاریخ مشخص یک روز و برای بازه، دو روز را انتخاب کنید؛ روزهای دارای نقطه سبز تصویر موجود دارند.
-                                 </div>
+                             <div class="form-text small mt-1" id="dateRangeHelp">
+                                 برای تاریخ مشخص یک روز و برای بازه، دو روز را انتخاب کنید؛ روزهای دارای نقطه سبز تصویر موجود دارند.
+                             </div>
+                        </div>
+
+                        <!-- Traffic Resolution Section -->
+                        <div class="search-section" id="trafficResolutionSection" style="display:none">
+                            <h6 class="section-title">
+                                <i class="bi bi-clock-history"></i> سطح تفکیک زمانی
+                            </h6>
+                            <p class="text-muted small mb-2">رکوردهای روزانه یا ساعتی شمارنده‌های ترافیکی را انتخاب کنید.</p>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="trafficResolution" id="trafficResDaily" value="daily" checked>
+                                    <label class="form-check-label" for="trafficResDaily">روزانه</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="trafficResolution" id="trafficResHourly" value="hourly">
+                                    <label class="form-check-label" for="trafficResHourly">ساعتی</label>
+                                </div>
                             </div>
+                        </div>
 
                             <!-- Cloud Cover Section -->
                             <div class="search-section" id="cloudCoverSection">
@@ -598,6 +616,23 @@
                                     <i class="bi bi-box-arrow-down"></i> تبدیل و دانلود
                                 </button>
                             </div>
+                        </div>
+
+                        <div class="search-section" id="trafficExportSection" style="display:none;">
+                            <h6 class="section-title"><i class="bi bi-traffic-cone"></i> خروجی شمارنده‌های ترافیکی</h6>
+                            <p class="text-muted small mb-2">
+                                رکوردهای انتخاب‌شده در تب نتایج به‌صورت لایه نقطه‌ای خروجی می‌شوند.
+                            </p>
+                            <div class="small text-muted mb-2" id="trafficExportSummary"></div>
+                            <label class="form-label small mb-1" for="trafficExportFormat">فرمت خروجی</label>
+                            <select class="form-select form-select-sm mb-2" id="trafficExportFormat">
+                                <option value="geojson">GeoJSON</option>
+                                <option value="shp">Shapefile (ZIP)</option>
+                                <option value="csv">CSV</option>
+                            </select>
+                            <button type="button" class="btn btn-primary btn-sm w-100" id="btnTrafficExport">
+                                <i class="bi bi-download"></i> دانلود رکوردهای انتخاب‌شده
+                            </button>
                         </div>
 
                         <!-- Height Points Sampling Settings (DEM + نقاط ارتفاعی process) -->

@@ -19,6 +19,7 @@ from earthquake import router as earthquake_router
 from ghs import router as ghs_router
 from geh import router as geh_router
 from docs_router import router as docs_router
+from traffic import router as traffic_router
 
 app = FastAPI(title="Shahrkavi API")
 
@@ -41,6 +42,7 @@ app.include_router(earthquake_router, prefix="/earthquakes", tags=["earthquakes"
 app.include_router(ghs_router, prefix="/ghs", tags=["ghs"])
 app.include_router(geh_router, prefix="/geh", tags=["geh"])
 app.include_router(docs_router, prefix="/docs", tags=["docs"])
+app.include_router(traffic_router, prefix="/traffic-counters", tags=["traffic-counters"])
 
 # Serve static files from project root
 _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))

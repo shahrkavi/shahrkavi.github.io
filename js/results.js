@@ -19,6 +19,29 @@ const ResultsModule = (() => {
         // Cart updates
         EventBus.on('cart:updated', onCartUpdated);
 
+const resultsTable = document.getElementById('resultsTable');
+        if (resultsTable) {
+            resultsTable.addEventListener('change', event => {
+                if (!isTrafficMode()) return;
+                if (event.target.id === 'trafficSelectAll') {
+                    AppState.selectedTrafficCounters = event.target.checked
+                        ? currentResults.map(item => Number(item.route_code)) : [];
+                } else if (event.target.classList.contains('traffic-counter-checkbox')) {
+                    const selected = new Set(AppState.selectedTrafficCounters || []);
+                    const routeCode = Number(event.target.value);
+                    if (event.target.checked) selected.add(routeCode);
+                    else selected.delete(routeCode);
+                    AppState.selectedTrafficCounters = [...selected];
+                }
+                renderTrafficResults();
+            });
+            resultsTable.addEventListener('click', event => {
+                if (!isTrafficMode()) return;
+                const btn = event.target.closest('.download-traffic-csv');
+                if (btn) downloadTrafficCounterCsv(btn);
+            });
+        }
+
         // Cart button click - download all cart items as a ZIP file
         const btnCart = document.getElementById('btnCart');
         if (btnCart) {
@@ -27,11 +50,13 @@ const ResultsModule = (() => {
             });
         }
 
-        EventBus.on('tab:changed', (tab) => {
+EventBus.on('tab:changed', (tab) => {
+            console.log('[tab:changed]', tab, 'isTrafficMode:', isTrafficMode(), 'trafficInfo:', !!AppState.trafficInfo, 'currentResults:', currentResults.length);
             if (tab === 'results') {
                 if (isOsmMode() && AppState.osmInfo) renderResults();
                 else if (isWeatherMode() && AppState.weatherInfo) renderResults();
                 else if (isEarthquakeMode() && AppState.earthquakeInfo) renderResults();
+                else if (isTrafficMode() && AppState.trafficInfo) renderResults();
                 else if (isDemMode() && AppState.demInfo) renderResults();
                 else if (isGhsMode() && AppState.ghsInfo) renderResults();
                 else if (isGehMode() && AppState.gehInfo) renderResults();
@@ -65,6 +90,10 @@ const ResultsModule = (() => {
 
     function isEarthquakeMode() {
         return (AppState.searchCriteria.dataset || '') === 'USGS_EQ';
+    }
+
+    function isTrafficMode() {
+        return (AppState.searchCriteria.dataset || '') === 'TRAFFIC_COUNTER';
     }
 
     function isOvtMode() {
@@ -121,6 +150,16 @@ const ResultsModule = (() => {
             AppState.selectedScene = null;
             setSummaryResults(total, 0, response.message);
             renderResults();
+            return;
+        }
+
+if (isTrafficMode()) {
+            console.log('[onCompleted] Traffic mode detected, allResults:', allResults.length);
+            currentResults = allResults.slice();
+            currentPage = 1;
+            AppState.selectedTrafficCounters = [];
+            setSummaryResults(total, 0, response.message);
+            renderTrafficResults();
             return;
         }
 
@@ -186,6 +225,11 @@ const ResultsModule = (() => {
             return;
         }
 
+        if (isTrafficMode()) {
+            renderTrafficResults();
+            return;
+        }
+
         if (isDemMode()) {
             renderDemResults();
             return;
@@ -239,6 +283,104 @@ const ResultsModule = (() => {
 
         // Show footprints on map
         showFootprintsOnMap(pageItems);
+    }
+
+function renderTrafficResults() {
+        console.log('[renderTrafficResults] called, currentResults:', currentResults.length, 'trafficInfo:', !!AppState.trafficInfo);
+        const selected = new Set(AppState.selectedTrafficCounters || []);
+
+        const dateFilterRow = document.getElementById('dateFilterRow');
+        const btnGoProcess = document.getElementById('btnGoProcess');
+        if (dateFilterRow) dateFilterRow.classList.add('d-none');
+        if (btnGoProcess) {
+            btnGoProcess.style.display = '';
+            btnGoProcess.innerHTML = '<i class="bi bi-geo-alt"></i> پردازش شمارنده‌ها';
+            btnGoProcess.disabled = selected.size === 0;
+        }
+
+        const countEl = document.getElementById('resultsCount');
+        const resLabel = AppState.trafficInfo?.resolution === 'hourly' ? 'ساعتی' : 'روزانه';
+        if (countEl) countEl.textContent = `${toPersianNum(currentResults.length)} شمارنده یافت شد (${resLabel})`;
+        const badge = document.getElementById('resultsBadge');
+        if (badge) {
+            badge.textContent = toPersianNum(currentResults.length);
+            badge.style.display = currentResults.length ? 'inline' : 'none';
+        }
+const selection = document.getElementById('resultsSelectionCount');
+        if (selection) {
+            selection.style.display = 'inline';
+            selection.textContent = `${toPersianNum(selected.size)} شمارنده انتخاب شده`;
+        }
+        const thead = document.querySelector('#resultsTable thead');
+        if (thead) thead.innerHTML = `<tr>
+            <th class="col-select"><input class="form-check-input" type="checkbox" id="trafficSelectAll"></th>
+            <th>کد مسیر</th><th>نام مسیر</th><th>دانلود CSV</th>
+        </tr>`;
+        const tbody = document.getElementById('resultsTableBody');
+        if (!tbody) return;
+        if (!currentResults.length) {
+            tbody.innerHTML = '<tr class="results-empty"><td colspan="4" class="text-center text-muted py-4">شمارنده‌ای در محدوده و بازه زمانی پیدا نشد</td></tr>';
+            return;
+        }
+tbody.innerHTML = currentResults.map(item => `
+            <tr>
+                <td class="col-select"><input class="form-check-input traffic-counter-checkbox" type="checkbox" value="${item.route_code}" ${selected.has(Number(item.route_code)) ? 'checked' : ''}></td>
+                <td dir="ltr">${escapeHtml(String(item.route_code))}</td>
+                <td>${escapeHtml(item.route_name || '--')}</td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-outline-primary download-traffic-csv" data-route-code="${escapeHtml(String(item.route_code))}" data-route-name="${escapeHtml(item.route_name || '--')}">
+                        <i class="bi bi-download"></i> CSV
+                    </button>
+                </td>
+            </tr>`).join('');
+
+        // Update "Select All" checkbox state
+        const selectAll = document.getElementById('trafficSelectAll');
+        if (selectAll) selectAll.checked = selected.size === currentResults.length && currentResults.length > 0;
+        try {
+            MapModule.showTrafficCounters(currentResults, [...selected]);
+        } catch (e) {
+            console.warn('Traffic markers not shown:', e);
+        }
+    }
+
+    function downloadTrafficCounterCsv(btn) {
+        const routeCode = btn.dataset.routeCode;
+        const routeName = btn.dataset.routeName;
+        if (!routeCode) return;
+        const apiBase = window.API_BASE || '';
+        const criteria = AppState.searchCriteria;
+        const body = {
+            route_codes: [Number(routeCode)],
+            date_from: criteria.dateFrom || '2016-03-20',
+            date_to: criteria.dateTo || '2016-04-20',
+            resolution: criteria.resolution || 'daily',
+        };
+        const url = `${apiBase}/traffic-counters/csv`;
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+            .then(response => {
+                if (!response.ok) throw new Error('Download failed');
+                return response.blob();
+            })
+            .then(blob => {
+                const filename = `traffic_${routeCode}_${routeName || ''}.csv`.replace(/\s+/g, '_');
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            })
+            .catch(err => {
+                console.error('CSV download failed:', err);
+                showToast('دانلود CSV ناموفق بود', 'error');
+            });
     }
 
     function renderCloudAverage() {

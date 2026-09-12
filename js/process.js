@@ -56,6 +56,11 @@ const ProcessModule = (() => {
             btnOvtExport.addEventListener('click', () => withButtonLoading(btnOvtExport, runOvtExport, 'در حال ثبت درخواست...'));
         }
 
+        const btnTrafficExport = document.getElementById('btnTrafficExport');
+        if (btnTrafficExport) {
+            btnTrafficExport.addEventListener('click', () => withButtonLoading(btnTrafficExport, runTrafficExport, 'در حال آماده‌سازی...'));
+        }
+
         const btnEarthquakeExport = document.getElementById('btnEarthquakeExport');
         if (btnEarthquakeExport) {
             btnEarthquakeExport.addEventListener('click', () => withButtonLoading(btnEarthquakeExport, runEarthquakeExport, 'در حال آماده‌سازی...'));
@@ -130,6 +135,10 @@ const ProcessModule = (() => {
             showWeatherMode();
             return;
         }
+        if (isTrafficMode()) {
+            showTrafficExportMode();
+            return;
+        }
         if (isEarthquakeMode()) {
             showEarthquakeExportMode();
             return;
@@ -180,6 +189,60 @@ const ProcessModule = (() => {
         return (AppState.searchCriteria.dataset || '') === 'WTH';
     }
 
+    function isTrafficMode() {
+        return (AppState.searchCriteria.dataset || '') === 'TRAFFIC_COUNTER';
+    }
+
+    function showTrafficExportMode() {
+        const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection',
+                     'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection',
+                     'osmExportSection', 'ovtExportSection', 'earthquakeExportSection',
+                     'gehExportSection', 'heightPointsSettings'];
+        ids.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.style.display = 'none';
+        });
+        const section = document.getElementById('trafficExportSection');
+        if (section) section.style.display = 'block';
+        const summary = document.getElementById('trafficExportSummary');
+        if (summary) {
+            const resLabel = AppState.searchCriteria.resolution === 'hourly' ? 'ساعتی' : 'روزانه';
+            summary.textContent = `${toPersianNum((AppState.selectedTrafficCounters || []).length)} شمارنده انتخاب شده | ${resLabel} | بازه ${isoToJalaliString(AppState.searchCriteria.dateFrom)} تا ${isoToJalaliString(AppState.searchCriteria.dateTo)}`;
+        }
+    }
+
+function runTrafficExport() {
+        const routeCodes = AppState.selectedTrafficCounters || [];
+        if (!routeCodes.length) {
+            showToast('حداقل یک شمارنده را انتخاب کنید', 'warning');
+            return;
+        }
+        const format = document.getElementById('trafficExportFormat')?.value || 'geojson';
+        const criteria = AppState.searchCriteria;
+        const body = {
+            route_codes: routeCodes,
+            date_from: criteria.dateFrom,
+            date_to: criteria.dateTo,
+            format: format,
+            resolution: criteria.resolution || 'daily',
+        };
+        return fetch(`${API_BASE}/traffic-counters/export`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.detail || data.message || 'Export failed');
+                showToast('درخواست در صف پردازش قرار گرفت', 'success');
+                // Redirect to processing page
+                setTimeout(() => {
+                    window.location.href = `processing.html?job=${encodeURIComponent(data.job_id)}&source=traffic`;
+                }, 500);
+            })
+            .catch(error => showToast(error.message, 'error'));
+    }
+
     function isEarthquakeMode() {
         return (AppState.searchCriteria.dataset || '') === 'USGS_EQ';
     }
@@ -200,7 +263,7 @@ const ProcessModule = (() => {
     function showWeatherMode() {
         const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection',
                      'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection',
-                     'osmExportSection'];
+                     'osmExportSection', 'trafficExportSection'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
@@ -224,7 +287,7 @@ const ProcessModule = (() => {
     }
 
     function showEarthquakeExportMode() {
-        const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection', 'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection', 'osmExportSection', 'ovtExportSection', 'heightPointsSettings', 'gehExportSection'];
+        const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection', 'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection', 'osmExportSection', 'trafficExportSection', 'ovtExportSection', 'heightPointsSettings', 'gehExportSection'];
         ids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
         const section = document.getElementById('earthquakeExportSection');
         if (section) section.style.display = 'block';
@@ -266,6 +329,8 @@ const ProcessModule = (() => {
         });
         const exportSection = document.getElementById('osmExportSection');
         if (exportSection) exportSection.style.display = 'none';
+        const trafficSection = document.getElementById('trafficExportSection');
+        if (trafficSection) trafficSection.style.display = 'none';
 
         // Re-apply section visibility for the currently selected process type
         updateSectionVisibility();
@@ -280,6 +345,8 @@ const ProcessModule = (() => {
         });
         const exportSection = document.getElementById('osmExportSection');
         if (exportSection) exportSection.style.display = 'block';
+        const trafficSection = document.getElementById('trafficExportSection');
+        if (trafficSection) trafficSection.style.display = 'none';
         renderOsmExportLayers();
     }
 
@@ -316,7 +383,7 @@ const ProcessModule = (() => {
     function showOvtExportMode() {
         const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection',
                      'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection',
-                     'osmExportSection', 'heightPointsSettings', 'gehExportSection', 'earthquakeExportSection'];
+                     'osmExportSection', 'trafficExportSection', 'heightPointsSettings', 'gehExportSection', 'earthquakeExportSection'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';
@@ -336,7 +403,7 @@ const ProcessModule = (() => {
     function showGehExportMode() {
         const ids = ['processSceneInfo', 'processInputScenes', 'processTypeSection',
                      'cropSettings', 'bandSettings', 'customBandSettings', 'processRunSection',
-                     'osmExportSection', 'ovtExportSection', 'earthquakeExportSection', 'heightPointsSettings'];
+                     'osmExportSection', 'trafficExportSection', 'ovtExportSection', 'earthquakeExportSection', 'heightPointsSettings'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = 'none';

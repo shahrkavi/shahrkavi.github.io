@@ -1,0 +1,21 @@
+services:
+  traffic-postgis:
+    image: postgis/postgis:16-3.4
+    container_name: shahrkavi-traffic-postgis
+    environment:
+      POSTGRES_DB: ${TRAFFIC_POSTGRES_DB:-shahrkavi}
+      POSTGRES_USER: ${TRAFFIC_POSTGRES_USER:-shahrkavi}
+      POSTGRES_PASSWORD: ${TRAFFIC_POSTGRES_PASSWORD:-shahrkavi-local}
+    ports:
+      - "${TRAFFIC_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - shahrkavi-traffic-postgres:/var/lib/postgresql/data
+      - ./db/traffic/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  shahrkavi-traffic-postgres:

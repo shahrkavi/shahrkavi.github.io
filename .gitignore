@@ -44,6 +44,15 @@ fastapi/bin/
 # Downloaded/processed files (generated at runtime)
 fastapi/downloads/
 
+# Locally generated traffic import files
+data/traffic/iran_daily_traffic_gregorian.csv
+data/traffic/sample.csv
+iran_daily_traffic.csv
+
+# Database dump files
+*.dump
+traffic_dump*
+
 # Test/Debug files
 *.txt
 !README.md

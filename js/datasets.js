@@ -29,6 +29,7 @@ const DatasetsModule = (() => {
         { id: 'OVT', name: 'ساختمانهای Overture Maps', info: 'فوتپرینت ساختمانها | ارتفاع | کل جهان | جستجوی اول چند دقیقه', category: 'OSM' },
         { id: 'WTH', name: 'ایستگاههای هواشناسی', info: 'داده‌های روزانه | ایستگاه‌های منطقه انتخابی', category: 'هواشناسی' },
         { id: 'USGS_EQ', name: 'زمین‌لرزه‌های USGS', info: 'سری زمانی تاریخی | کاتالوگ زلزله آمریکا', category: 'سری زمانی' },
+        { id: 'TRAFFIC_COUNTER', name: 'شمارنده‌های ترافیکی', info: 'نقاط مکانی | رکوردهای روزانه و ساعتی ترافیک', category: 'سری زمانی' },
     ];
 
     // Families that expose cloud-cover metadata (per-planetary-computer)
@@ -472,6 +473,7 @@ const DatasetsModule = (() => {
         const earthquakeSection = document.getElementById('earthquakeSection');
         const ghsSection = document.getElementById('ghsYearSection');
         const gehSection = document.getElementById('gehSection');
+        const trafficResSection = document.getElementById('trafficResolutionSection');
         if (!cloudSection) return;
 
         if (!datasetId) {
@@ -482,6 +484,7 @@ const DatasetsModule = (() => {
             if (earthquakeSection) earthquakeSection.style.display = 'none';
             if (ghsSection) ghsSection.style.display = 'none';
             if (gehSection) gehSection.style.display = 'none';
+            if (trafficResSection) trafficResSection.style.display = 'none';
             return;
         }
 
@@ -490,15 +493,19 @@ const DatasetsModule = (() => {
         const isDem = datasetId === 'DEM';
         const isOvt = datasetId === 'OVT';
         const isEarthquake = datasetId === 'USGS_EQ';
+        const isTraffic = datasetId === 'TRAFFIC_COUNTER';
         const isGhs = datasetId?.startsWith('GHS_');
         const isGeh = datasetId === 'GEH' || datasetId === 'ESRI_WB';
         if (isEarthquake && typeof JalaliDatePicker !== 'undefined') {
             JalaliDatePicker.clear();
             JalaliDatePicker.showRecentMonths();
         }
+        if (isTraffic && typeof JalaliDatePicker !== 'undefined') {
+            JalaliDatePicker.setRange('2016-03-20', '2026-07-23');
+        }
         const supportsCloud = CLOUD_CAPABLE.has(datasetId);
 
-        const noCloud = isOsm || isWeather || isDem || isGhs || isOvt || isEarthquake || isGeh;
+        const noCloud = isOsm || isWeather || isDem || isGhs || isOvt || isEarthquake || isGeh || isTraffic;
         cloudSection.style.display = noCloud ? 'none' : (supportsCloud ? 'block' : 'none');
         if (cloudNote) {
             cloudNote.style.display = noCloud ? 'none' : (supportsCloud ? 'none' : 'block');
@@ -512,6 +519,7 @@ const DatasetsModule = (() => {
         if (earthquakeSection) earthquakeSection.style.display = isEarthquake ? 'block' : 'none';
         if (ghsSection) ghsSection.style.display = isGhs ? 'block' : 'none';
         if (gehSection) gehSection.style.display = isGeh ? 'block' : 'none';
+        if (trafficResSection) trafficResSection.style.display = isTraffic ? 'block' : 'none';
         if (isGhs && typeof SearchModule !== 'undefined' && SearchModule.loadGhsYears) SearchModule.loadGhsYears();
     }
 

@@ -484,6 +484,7 @@ const SearchModule = (() => {
             catalog: document.getElementById('eqCatalog')?.value.trim() || '',
             contributor: document.getElementById('eqContributor')?.value.trim() || '',
             queryPairs: collectEarthquakeQueryPairs(),
+            resolution: document.querySelector('input[name="trafficResolution"]:checked')?.value || 'daily',
         };
 
         function parseOptionalNumber(id) {
@@ -496,6 +497,7 @@ const SearchModule = (() => {
         const isDem = criteria.dataset === 'DEM';
         const isOvt = criteria.dataset === 'OVT';
         const isEarthquake = criteria.dataset === 'USGS_EQ';
+        const isTraffic = criteria.dataset === 'TRAFFIC_COUNTER';
         const isGhs = criteria.dataset?.startsWith('GHS_');
         const isGeh = criteria.dataset === 'GEH' || criteria.dataset === 'ESRI_WB';
 
@@ -574,6 +576,15 @@ const SearchModule = (() => {
                 showToast('حداکثر تعداد نتایج باید بین ۱ تا ۲۰۰۰۰ باشد', 'warning');
                 return;
             }
+        } else if (isTraffic) {
+            if (!criteria.dateFrom || !criteria.dateTo) {
+                showToast('برای شمارنده‌های ترافیکی، بازه زمانی الزامی است', 'warning');
+                return;
+            }
+            if (criteria.dateFrom > criteria.dateTo) {
+                showToast('تاریخ شروع باید قبل از تاریخ پایان باشد', 'error');
+                return;
+            }
         } else if (isGeh) {
             if (!criteria.dateFrom || !criteria.dateTo) {
                 showToast('برای تصاویر تاریخی Google Earth، انتخاب تاریخ الزامی است', 'warning');
@@ -635,6 +646,7 @@ const SearchModule = (() => {
                     AppState.overtureInfo = response.overture || null;
                     AppState.weatherInfo = response.weather || null;
                     AppState.earthquakeInfo = response.earthquake || null;
+                    AppState.trafficInfo = criteria.dataset === 'TRAFFIC_COUNTER' ? { ...response, resolution: criteria.resolution } : null;
                     AppState.demInfo = response.dem || null;
                     AppState.ghsInfo = response.ghs || null;
                     AppState.gehInfo = response.geh || null;

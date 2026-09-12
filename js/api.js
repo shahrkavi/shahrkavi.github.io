@@ -155,6 +155,11 @@ const ApiService = (() => {
                     return;
                 }
 
+                if (dataset === 'TRAFFIC_COUNTER') {
+                    resolve(await searchTrafficCounters(criteria));
+                    return;
+                }
+
                 if (dataset === 'DEM') {
                     // Copernicus DEM search
                     resolve(await searchDem(criteria));
@@ -582,6 +587,63 @@ const ApiService = (() => {
             }));
     }
 
+    function trafficGeometry(criteria) {
+        const points = (criteria.regionGeometry || []).map(point => [point.lng, point.lat]);
+        if (points.length < 3) throw new Error('محدوده چندضلعی معتبر نیست');
+        points.push(points[0]);
+        return { type: 'Polygon', coordinates: [points] };
+    }
+
+    async function searchTrafficCounters(criteria) {
+        try {
+            const response = await fetch(`${API_BASE}/traffic-counters/search`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    geometry: trafficGeometry(criteria),
+                    date_from: criteria.dateFrom,
+                    date_to: criteria.dateTo,
+                    resolution: criteria.resolution || 'daily',
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || `Server error: ${response.status}`);
+            return data;
+        } catch (error) {
+            console.error('Traffic counter search error:', error);
+            return { success: false, data: [], total: 0, message: error.message };
+        }
+    }
+
+    async function exportTrafficCounters(criteria, routeCodes, format) {
+        const response = await fetch(`${API_BASE}/traffic-counters/export`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                geometry: trafficGeometry(criteria),
+                date_from: criteria.dateFrom,
+                date_to: criteria.dateTo,
+                route_codes: routeCodes,
+                format,
+                resolution: criteria.resolution || 'daily',
+            }),
+        });
+        if (!response.ok) {
+            let detail = `Server error: ${response.status}`;
+            try { detail = (await response.json()).detail || detail; } catch (e) { /* ignore */ }
+            throw new Error(detail);
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = format === 'csv' ? 'traffic_counters.csv' : 'traffic_counters.geojson';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    }
+
     function searchGeh(criteria) {
         const params = new URLSearchParams({
             north: criteria.north, south: criteria.south, east: criteria.east, west: criteria.west,
@@ -610,6 +672,7 @@ const ApiService = (() => {
         fetchAvailableDates,
         searchGhs,
         searchGeh,
+        exportTrafficCounters,
         getDownloadUrl,
     };
 })();
