@@ -5,10 +5,8 @@
 
 const MapModule = (() => {
     let map;
-    let drawnItems;          // FeatureGroup for drawn shapes
-    let currentTool = null;
+    let drawnItems;          // FeatureGroup for the active region rectangle
     let drawControl = null;
-    let selectionRect = null; // Highlight rectangle for the selected region
     let coveragePreviewLayer = null;
     let coveragePreviewId = null;
 
@@ -97,9 +95,6 @@ const MapModule = (() => {
             attributionControl: true,
         });
 
-        // Add zoom control to a custom position
-        L.control.zoom({ position: 'topright' }).addTo(map);
-
         // Add default basemap
         activeBasemapLayer = BASEMAPS[currentBasemap].layer;
         map.addLayer(activeBasemapLayer);
@@ -111,6 +106,9 @@ const MapModule = (() => {
         // Initialize Leaflet Draw control (hidden, we use our own toolbar)
         initDrawControl();
 
+        // Add zoom control (after draw button so it appears below it)
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
         // Mouse move for coordinates
         map.on('mousemove', onMouseMove);
 
@@ -119,11 +117,7 @@ const MapModule = (() => {
 
         // Handle drawing events
         map.on(L.Draw.Event.CREATED, onDrawCreated);
-        map.on(L.Draw.Event.EDITED, onDrawEdited);
         map.on(L.Draw.Event.DELETED, onDrawDeleted);
-
-        // Init toolbar
-        initToolbar();
 
         // Listen for basemap changes from layers module
         EventBus.on('basemap:changed', switchBasemap);
@@ -135,18 +129,6 @@ const MapModule = (() => {
         drawControl = new L.Control.Draw({
             position: 'topright',
             draw: {
-                polyline: false,
-                circle: false,
-                circlemarker: false,
-                marker: {
-                    icon: L.icon({
-                        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-                        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-                        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-                        iconSize: [25, 41],
-                        iconAnchor: [12, 41],
-                    }),
-                },
                 rectangle: {
                     shapeOptions: {
                         color: '#ff7800',
@@ -155,121 +137,153 @@ const MapModule = (() => {
                         fillOpacity: 0.2,
                     },
                 },
-                polygon: {
-                    shapeOptions: {
-                        color: '#ff7800',
-                        weight: 2,
-                        fillColor: '#ff7800',
-                        fillOpacity: 0.2,
-                    },
-                    allowIntersection: false,
-                    showArea: true,
-                },
             },
             edit: {
                 featureGroup: drawnItems,
-                edit: true,
-                remove: true,
+                edit: false,
+                remove: false,
             },
         });
 
-        // Add the control but we'll hide its toolbar since we use our own
+        // Add the control but hide its default toolbar
         map.addControl(drawControl);
 
-        // Hide the default Leaflet.draw toolbar
         setTimeout(() => {
             const drawToolbar = document.querySelector('.leaflet-draw.leaflet-control');
-            if (drawToolbar) {
-                drawToolbar.style.display = 'none';
-            }
+            if (drawToolbar) drawToolbar.style.display = 'none';
         }, 100);
-    }
 
-    function initToolbar() {
-        const toolbar = document.getElementById('mapToolbar');
-        if (!toolbar) return;
-
-        toolbar.querySelectorAll('[data-tool]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const tool = btn.dataset.tool;
-                activateTool(tool);
-            });
+        // Add custom draw button inside native Leaflet topright controls
+        const DrawRegionButton = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: function () {
+                const btn = L.DomUtil.create('button', 'leaflet-bar leaflet-control leaflet-control-draw-region');
+                btn.type = 'button';
+                btn.dataset.tool = 'rectangle';
+                btn.title = 'رسم مستطیل';
+                btn.setAttribute('aria-label', 'رسم مستطیل');
+                btn.setAttribute('aria-pressed', 'false');
+                btn.innerHTML = '<i class="bi bi-bounding-box"></i>';
+                L.DomEvent.disableClickPropagation(btn);
+                btn.addEventListener('click', function () {
+                    activateTool('rectangle');
+                });
+                return btn;
+            },
         });
+        new DrawRegionButton().addTo(map);
     }
 
     function activateTool(tool) {
-        // Clear current tool
-        if (currentTool === tool) {
-            deactivateTools();
+        if (tool !== 'rectangle') return;
+
+        if (map._activeDrawHandler) {
+            cancelDrawing();
             return;
         }
 
-        // Deactivate current
-        deactivateTools();
-
-        // Clear existing drawings if "clear" tool
-        if (tool === 'clear') {
-            drawnItems.clearLayers();
-            AppState.mapDrawings = null;
-            EventBus.emit('map:drawings:cleared');
+        if (drawnItems.getLayers().length > 0) {
+            clearDrawing();
             return;
         }
 
-        // Activate new tool
-        const drawType = {
-            point: 'marker',
-            rectangle: 'rectangle',
-            polygon: 'polygon',
-        }[tool];
-
-        if (drawType) {
-            currentTool = tool;
-
-            // Programmatically activate the draw handler
-            const Draw = L.Draw;
-            const Feature = drawType === 'marker' ? Draw.Marker :
-                             drawType === 'rectangle' ? Draw.Rectangle :
-                             Draw.Polygon;
-
-            // Use the internal draw handler
-            const options = drawControl.options.draw[drawType];
-            const handler = new Feature(map, options);
-            handler.enable();
-
-            // Store handler for later disable
-            map._activeDrawHandler = handler;
-
-            // Update button state
-            document.querySelector(`[data-tool="${tool}"]`)?.classList.add('active');
-
-            EventBus.emit('map:tool:activated', tool);
-        }
+        const handler = new L.Draw.Rectangle(map, drawControl.options.draw.rectangle);
+        handler.enable();
+        map._activeDrawHandler = handler;
+        updateToolbarState();
+        EventBus.emit('map:tool:activated', tool);
     }
 
-    function deactivateTools() {
+    function cancelDrawing() {
         if (map._activeDrawHandler) {
             map._activeDrawHandler.disable();
             map._activeDrawHandler = null;
         }
-        currentTool = null;
-        document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.remove('active'));
+        updateToolbarState();
+    }
+
+    function clearRegionLayer(emitClearEvent = false, forceClearEvent = false) {
+        const hadRegion = drawnItems && drawnItems.getLayers().length > 0;
+        drawnItems.clearLayers();
+        AppState.mapDrawings = null;
+        updateToolbarState();
+        if ((emitClearEvent && hadRegion) || forceClearEvent) {
+            EventBus.emit('map:drawings:cleared');
+        }
+    }
+
+    function clearDrawing() {
+        clearRegionLayer(true);
+    }
+
+    function setRegionBounds(bounds, source = 'map-bounds') {
+        if (!map || !drawnItems || !bounds) return null;
+
+        cancelDrawing();
+        clearRegionLayer(true);
+
+        const layer = L.rectangle(
+            [[bounds.south, bounds.west], [bounds.north, bounds.east]],
+            {
+                color: '#ff7800',
+                weight: 2,
+                fillColor: '#ff7800',
+                fillOpacity: 0.2,
+            }
+        ).addTo(drawnItems);
+
+        const coords = {
+            type: 'rectangle',
+            source,
+            north: bounds.north,
+            south: bounds.south,
+            east: bounds.east,
+            west: bounds.west,
+        };
+        AppState.mapDrawings = coords;
+        updateToolbarState();
+        EventBus.emit('map:drawing:created', coords);
+        return layer;
+    }
+
+    function deactivateTools() {
+        cancelDrawing();
+    }
+
+    function updateToolbarState() {
+        const button = document.querySelector('.leaflet-control-draw-region')
+            || document.querySelector('[data-tool="rectangle"]');
+        const icon = button?.querySelector('i');
+        const isDrawing = Boolean(map?._activeDrawHandler);
+        const hasDrawing = drawnItems && drawnItems.getLayers().length > 0;
+
+        if (!button || !icon) return;
+
+        button.classList.toggle('active', isDrawing);
+        button.setAttribute('aria-pressed', String(isDrawing));
+
+        if (isDrawing) {
+            icon.className = 'bi bi-x-circle';
+            button.title = 'لغو ترسیم';
+            button.setAttribute('aria-label', 'لغو ترسیم مستطیل');
+        } else if (hasDrawing) {
+            icon.className = 'bi bi-trash3';
+            button.title = 'پاک کردن مستطیل';
+            button.setAttribute('aria-label', 'پاک کردن مستطیل ترسیم‌شده');
+        } else {
+            icon.className = 'bi bi-bounding-box';
+            button.title = 'رسم مستطیل';
+            button.setAttribute('aria-label', 'رسم مستطیل روی نقشه');
+        }
     }
 
     function onDrawCreated(e) {
         const layer = e.layer;
+        drawnItems.clearLayers();
         drawnItems.addLayer(layer);
 
-        // Extract coordinates
         let coords = null;
-        if (e.layerType === 'marker') {
-            const latlng = layer.getLatLng();
-            coords = {
-                type: 'point',
-                lat: latlng.lat,
-                lng: latlng.lng,
-            };
-        } else if (e.layerType === 'rectangle') {
+        if (e.layerType === 'rectangle') {
             const bounds = layer.getBounds();
             coords = {
                 type: 'rectangle',
@@ -278,55 +292,40 @@ const MapModule = (() => {
                 east: bounds.getEast(),
                 west: bounds.getWest(),
             };
-        } else if (e.layerType === 'polygon') {
-            const latlngs = layer.getLatLngs()[0];
-            const lats = latlngs.map(ll => ll.lat);
-            const lngs = latlngs.map(ll => ll.lng);
-            coords = {
-                type: 'polygon',
-                north: Math.max(...lats),
-                south: Math.min(...lats),
-                east: Math.max(...lngs),
-                west: Math.min(...lngs),
-                vertices: latlngs.map(ll => ({ lat: ll.lat, lng: ll.lng })),
-            };
         }
+
+        if (!coords) return;
 
         AppState.mapDrawings = coords;
         EventBus.emit('map:drawing:created', coords);
 
-        // Auto-fill the form
-        if (coords && coords.type !== 'point') {
+        if (coords.type !== 'point') {
             document.getElementById('North') && (document.getElementById('North').value = coords.north.toFixed(4));
             document.getElementById('South') && (document.getElementById('South').value = coords.south.toFixed(4));
             document.getElementById('East') && (document.getElementById('East').value = coords.east.toFixed(4));
             document.getElementById('West') && (document.getElementById('West').value = coords.west.toFixed(4));
         }
 
-        // Deactivate tool after drawing
         deactivateTools();
     }
 
-    function onDrawEdited(e) {
-        // Re-extract coordinates from edited shapes
-        if (drawnItems.getLayers().length > 0) {
-            const layer = drawnItems.getLayers()[0];
-            // Recalculate bounds
-            const bounds = drawnItems.getBounds();
-            const coords = {
-                type: 'shape',
-                north: bounds.getNorth(),
-                south: bounds.getSouth(),
-                east: bounds.getEast(),
-                west: bounds.getWest(),
-            };
-            AppState.mapDrawings = coords;
-            EventBus.emit('map:drawing:created', coords);
-        }
+    function onDrawEdited() {
+        if (drawnItems.getLayers().length === 0) return;
+
+        const bounds = drawnItems.getBounds();
+        const coords = {
+            type: 'rectangle',
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest(),
+        };
+        AppState.mapDrawings = coords;
+        EventBus.emit('map:drawing:created', coords);
     }
 
     function onDrawDeleted() {
-        AppState.mapDrawings = null;
+        clearRegionLayer(false);
         EventBus.emit('map:drawings:cleared');
     }
 
@@ -371,37 +370,17 @@ const MapModule = (() => {
     }
 
     /**
-     * Draw/replace the highlight rectangle for the currently selected region
-     * (kept outside drawnItems so draw/edit/remove tools don't touch it)
+     * Replace the active region with a rectangle.
      */
     function showSelectionBounds(north, south, east, west) {
-        if (!map) return null;
-        if (selectionRect) {
-            map.removeLayer(selectionRect);
-        }
-        selectionRect = L.rectangle(
-            [[south, west], [north, east]],
-            {
-                color: '#ff7800',
-                weight: 2,
-                dashArray: '6, 4',
-                fillColor: '#ff7800',
-                fillOpacity: 0.08,
-                interactive: false,
-            }
-        );
-        selectionRect.addTo(map);
-        return selectionRect;
+        return setRegionBounds({ north, south, east, west });
     }
 
     /**
-     * Remove the selection rectangle (if shown)
+     * Remove the active region without emitting a clear event.
      */
     function clearSelectionBounds() {
-        if (selectionRect && map) {
-            map.removeLayer(selectionRect);
-        }
-        selectionRect = null;
+        clearRegionLayer(false);
     }
 
     /**

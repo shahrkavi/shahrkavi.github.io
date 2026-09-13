@@ -88,17 +88,7 @@ const SearchModule = (() => {
         if (btnUseMap) {
             btnUseMap.addEventListener('click', () => {
                 const bounds = MapModule.getMapBounds();
-                document.getElementById('North').value = bounds.north.toFixed(4);
-                document.getElementById('South').value = bounds.south.toFixed(4);
-                document.getElementById('East').value = bounds.east.toFixed(4);
-                document.getElementById('West').value = bounds.west.toFixed(4);
-
-                // Highlight the selected region on the map
                 MapModule.showSelectionBounds(bounds.north, bounds.south, bounds.east, bounds.west);
-
-                // Coordinates changed -> refresh calendar availability dots
-                scheduleAvailableDatesRefresh();
-
                 showToast('محدوده نقشه به فرم جستجو منتقل شد', 'info');
             });
         }
@@ -124,8 +114,6 @@ const SearchModule = (() => {
 
         // Listen for map drawing events to auto-fill coordinates
         EventBus.on('map:drawing:created', (coords) => {
-            // A fresh hand-drawn shape replaces the "use map bounds" highlight
-            MapModule.clearSelectionBounds();
             if (coords && coords.type !== 'point') {
                 document.getElementById('North').value = coords.north.toFixed(4);
                 document.getElementById('South').value = coords.south.toFixed(4);
@@ -252,17 +240,8 @@ const SearchModule = (() => {
             bounds = bounds || getGeoJsonBounds(geojson);
             if (!bounds) throw new Error('فایل هندسه جغرافیایی معتبری ندارد.');
 
-            ['North', 'South', 'East', 'West'].forEach((id, index) => {
-                const values = [bounds.north, bounds.south, bounds.east, bounds.west];
-                document.getElementById(id).value = values[index].toFixed(4);
-            });
-            AppState.mapDrawings = { type: 'uploaded', ...bounds };
-            MapModule.clearSelectionBounds();
             MapModule.showSelectionBounds(bounds.north, bounds.south, bounds.east, bounds.west);
             MapModule.fitBounds(bounds.north, bounds.south, bounds.east, bounds.west);
-            saveRegionPreference(bounds);
-            setSummaryRegion(bounds.north, bounds.south, bounds.east, bounds.west);
-            scheduleAvailableDatesRefresh();
             setRegionUploadStatus(status, `محدوده از فایل «${file.name}» بارگذاری شد. مختصات به WGS84 تبدیل شد.`, true);
         } catch (error) {
             input.value = '';
@@ -297,17 +276,8 @@ const SearchModule = (() => {
     }
 
     function applyRegionExtent(bounds, note = '') {
-        ['North', 'South', 'East', 'West'].forEach((id, index) => {
-            const values = [bounds.north, bounds.south, bounds.east, bounds.west];
-            document.getElementById(id).value = values[index].toFixed(4);
-        });
-        AppState.mapDrawings = { type: 'uploaded', ...bounds };
-        MapModule.clearSelectionBounds();
         MapModule.showSelectionBounds(bounds.north, bounds.south, bounds.east, bounds.west);
         MapModule.fitBounds(bounds.north, bounds.south, bounds.east, bounds.west);
-        saveRegionPreference(bounds);
-        setSummaryRegion(bounds.north, bounds.south, bounds.east, bounds.west);
-        scheduleAvailableDatesRefresh();
         if (note) setRegionUploadStatus(document.getElementById('regionUploadStatus'), note, true);
     }
 
@@ -605,26 +575,19 @@ const SearchModule = (() => {
             return;
         }
 
-        // Preserve the exact drawn polygon when it still matches the form
-        // bounds. Otherwise use the four corners of the coordinate rectangle.
-        const drawing = AppState.mapDrawings;
-        const drawingMatchesBounds = drawing
-            && ['north', 'south', 'east', 'west'].every(key =>
-                Number.isFinite(drawing[key])
-                && Math.abs(drawing[key] - criteria[key]) < 0.001
-            );
-
-        criteria.regionGeometry = drawingMatchesBounds
-            && drawing.type === 'polygon'
-            && Array.isArray(drawing.vertices)
-            && drawing.vertices.length >= 3
-            ? drawing.vertices.map(vertex => ({ lat: vertex.lat, lng: vertex.lng }))
-            : [
-                { lat: criteria.north, lng: criteria.west },
-                { lat: criteria.north, lng: criteria.east },
-                { lat: criteria.south, lng: criteria.east },
-                { lat: criteria.south, lng: criteria.west },
-            ];
+        // All region sources are represented as a rectangle.
+        const criteriaBounds = {
+            north: criteria.north,
+            south: criteria.south,
+            east: criteria.east,
+            west: criteria.west,
+        };
+        criteria.regionGeometry = [
+            { lat: criteriaBounds.north, lng: criteriaBounds.west },
+            { lat: criteriaBounds.north, lng: criteriaBounds.east },
+            { lat: criteriaBounds.south, lng: criteriaBounds.east },
+            { lat: criteriaBounds.south, lng: criteriaBounds.west },
+        ];
 
         // Update app state
         AppState.searchCriteria = { ...AppState.searchCriteria, ...criteria };

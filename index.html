@@ -105,7 +105,7 @@
                                 <div class="dataset-intro-icon"><i class="bi bi-geo-alt"></i></div>
                                 <div>
                                     <h2>محدوده موردنظر را مشخص کنید</h2>
-                                    <p>مختصات را وارد کنید یا محدوده را با ابزارهای ترسیم روی نقشه انتخاب کنید.</p>
+                                    <p>مختصات را وارد کنید یا محدوده را با ابزار رسم مستطیل روی نقشه انتخاب کنید.</p>
                                 </div>
                             </div>
                         </div>
@@ -778,29 +778,16 @@
             </div>
 
             <!-- Map Toolbar -->
-            <div class="map-toolbar" id="mapToolbar">
-                <div class="basemap-control">
-                    <label for="basemapSelect">
-                        <i class="bi bi-map"></i>
-                        <span>نقشه پایه</span>
-                    </label>
-                    <select class="form-select form-select-sm" id="basemapSelect" aria-label="انتخاب نقشه پایه">
-                        <option value="satellite">ماهواره‌ای Bing</option>
-                        <option value="osm" selected>OpenStreetMap</option>
-                        <option value="terrain">زمین Stamen</option>
-                    </select>
-                </div>
-                <div class="btn-group-vertical" role="group">
-                    <button class="btn btn-light map-tool-btn" data-tool="rectangle" title="انتخاب مستطیل">
-                        <i class="bi bi-bounding-box"></i>
-                    </button>
-                    <button class="btn btn-light map-tool-btn" data-tool="polygon" title="انتخاب چندضلعی">
-                        <i class="bi bi-pentagon"></i>
-                    </button>
-                    <button class="btn btn-light map-tool-btn" data-tool="clear" title="پاک کردن">
-                        <i class="bi bi-eraser"></i>
-                    </button>
-                </div>
+            <div class="basemap-control">
+                <label for="basemapSelect">
+                    <i class="bi bi-map"></i>
+                    <span>نقشه پایه</span>
+                </label>
+                <select class="form-select form-select-sm" id="basemapSelect" aria-label="انتخاب نقشه پایه">
+                    <option value="satellite">ماهواره‌ای Bing</option>
+                    <option value="osm" selected>OpenStreetMap</option>
+                    <option value="terrain">زمین Stamen</option>
+                </select>
             </div>
 
             <!-- Coordinates Display -->

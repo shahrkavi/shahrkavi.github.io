@@ -108,7 +108,18 @@ function initPreviousRegion() {
     if (clearButton) clearButton.addEventListener('click', clearPreviousRegion);
 
     EventBus.on('map:drawing:created', coords => {
-        if (coords && coords.type !== 'point') saveRegionPreference(coords);
+        if (coords && coords.type !== 'point') {
+            saveRegionPreference(coords);
+            setSummaryRegion(coords.north, coords.south, coords.east, coords.west);
+        }
+    });
+
+    EventBus.on('map:drawings:cleared', () => {
+        ['North', 'South', 'East', 'West'].forEach(id => {
+            const field = document.getElementById(id);
+            if (field) field.value = '';
+        });
+        setSummaryRegion(null);
     });
 
     updatePreviousRegionUI(readPreviousRegion());
@@ -221,8 +232,8 @@ function initHelpButton() {
                             <h6 class="fw-bold"><i class="bi bi-search text-primary me-1"></i> جستجو</h6>
                             <p class="text-muted small">محدوده جغرافیایی را در فرم وارد کنید یا از ابزارهای نقشه برای ترسیم محدوده استفاده کنید. سپس دیتاست موردنظر را انتخاب کرده و دکمه جستجو را بزنید.</p>
                             <hr>
-                            <h6 class="fw-bold"><i class="bi bi-pentagon text-primary me-1"></i> ابزارهای نقشه</h6>
-                            <p class="text-muted small">با ابزارهای نقطه، مستطیل و چندضلعی می‌توانید محدوده موردنظر را روی نقشه انتخاب کنید. دکمه پاک‌کن برای حذف شکل‌های ترسیم‌شده است.</p>
+                            <h6 class="fw-bold"><i class="bi bi-bounding-box text-primary me-1"></i> ابزار نقشه</h6>
+                            <p class="text-muted small">برای انتخاب محدوده، مستطیل را روی نقشه رسم کنید. در حالت ترسیم، همان آیکون به حالت لغو تغییر می‌کند و پس از رسم، برای پاک کردن محدوده استفاده می‌شود.</p>
                             <hr>
                             <h6 class="fw-bold"><i class="bi bi-database text-primary me-1"></i> دیتاست‌ها</h6>
                             <p class="text-muted small">از درخت دیتاست‌ها، ماهواره‌های Landsat، Sentinel، MODIS و غیره را انتخاب کنید.</p>
