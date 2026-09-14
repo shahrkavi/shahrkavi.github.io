@@ -131,6 +131,7 @@ const JalaliDatePicker = (() => {
             groupId: GROUP_ID,
             persianNumber: true,
             textFormat: 'yyyy/MM/dd',
+            dateFormat: 'yyyy-MM-dd',            
             selectedDateToShow: today,
             calendarViewOnChange: function () {
                 notifyViewChange();
@@ -145,6 +146,7 @@ const JalaliDatePicker = (() => {
             groupId: GROUP_ID,
             persianNumber: true,
             textFormat: 'yyyy/MM/dd',
+            dateFormat: 'yyyy-MM-dd',            
             selectedDateToShow: today,
             calendarViewOnChange: function () {
                 notifyViewChange();
