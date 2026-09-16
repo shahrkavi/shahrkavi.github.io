@@ -86,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initToastContainer();
     initHelpButton();
     initPreviousRegion();
+    initMobileTabMode();
 
     // Initialize cart
     updateCartUI();
@@ -259,6 +260,66 @@ function initHelpButton() {
         modal.show();
         modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
     });
+}
+
+/**
+ * Mobile tab mode: fullscreen panel for tabs 2-5, split view for tab 1.
+ * On tabs 2-5, a minimize button toggles the panel between full and half height.
+ */
+function initMobileTabMode() {
+    const sidePanel = document.getElementById('sidePanel');
+    const minimizeBtn = document.getElementById('panelMinimizeBtn');
+    if (!sidePanel || !minimizeBtn) return;
+
+    function isMobile() {
+        return window.matchMedia('(max-width: 768px)').matches;
+    }
+
+    function getActiveTab() {
+        if (AppState.currentTab) return AppState.currentTab;
+        const active = document.querySelector('#appTabs .nav-link.active');
+        return active ? active.id.replace('tab-', '') : 'region';
+    }
+
+    function updateMobileMode(tab) {
+        if (!isMobile()) {
+            sidePanel.classList.remove('split-mode', 'minimized');
+            return;
+        }
+
+        if (tab === 'region') {
+            sidePanel.classList.add('split-mode');
+            sidePanel.classList.remove('minimized');
+        } else {
+            sidePanel.classList.remove('split-mode');
+        }
+
+        if (typeof MapModule !== 'undefined' && MapModule.map()) {
+            setTimeout(() => MapModule.invalidateSize(), 300);
+        }
+    }
+
+    minimizeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        sidePanel.classList.toggle('minimized');
+        const icon = minimizeBtn.querySelector('i');
+        if (icon) {
+            icon.className = sidePanel.classList.contains('minimized')
+                ? 'bi bi-chevron-up'
+                : 'bi bi-chevron-down';
+        }
+        if (typeof MapModule !== 'undefined' && MapModule.map()) {
+            setTimeout(() => MapModule.invalidateSize(), 300);
+        }
+    });
+
+    EventBus.on('tab:changed', updateMobileMode);
+
+    window.addEventListener('resize', () => {
+        updateMobileMode(getActiveTab());
+    });
+
+    updateMobileMode(getActiveTab());
 }
 
 /**

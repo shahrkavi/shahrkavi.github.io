@@ -19,7 +19,7 @@
     <link href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link href="css/style.css?v=0.9" rel="stylesheet">
+    <link href="css/style.css?v=0.91" rel="stylesheet">
 </head>
 <body>
 
@@ -58,7 +58,11 @@
             <!-- Panel Resize Handle -->
             <div class="panel-resize-handle" id="panelResizeHandle"></div>
 
- 
+            <!-- Mobile minimize button (hidden on desktop, shown on tabs 2-5) -->
+            <button type="button" class="panel-minimize-btn" id="panelMinimizeBtn" title="کوچک کردن">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+
             <!-- Tab Navigation (Wizard Steps - not directly clickable, switched via JS) -->
             <ul class="nav nav-tabs app-tabs" id="appTabs" role="tablist">
                 <li class="nav-item" role="presentation">
@@ -835,7 +839,7 @@
     <!-- Application Scripts -->
     <script src="js/config.js?v=0.9"></script>
     <script src="js/api.js?v=0.9"></script>
-    <script src="js/app.js?v=0.9"></script>
+    <script src="js/app.js?v=0.91"></script>
 <script src="js/mds.bs.datetimepicker.js?v=0.9"></script>    
     <script src="js/jalali-datepicker.js?v=0.9"></script>
     <script src="js/map.js?v=0.9"></script>

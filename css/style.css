@@ -78,6 +78,7 @@ html, body {
 .app-container {
     display: flex;
     height: calc(100vh - var(--header-height));
+    height: calc(100dvh - var(--header-height));
     width: 100%;
     position: relative;
 }
@@ -87,6 +88,7 @@ html, body {
     flex: 1;
     position: relative;
     min-width: 0;
+    min-height: 0;
     background: #d4d4d4;
     display: flex;
     flex-direction: column;
@@ -179,6 +181,7 @@ html, body {
     background: var(--bg-panel);
     border-right: 1px solid var(--border-color);
     position: relative;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -326,6 +329,11 @@ html, body {
     background: var(--primary);
 }
 
+/* --- Mobile Minimize Button --- */
+.panel-minimize-btn {
+    display: none;
+}
+
 /* --- Tabs --- */
 .app-tabs {
     flex-shrink: 0;
@@ -367,6 +375,7 @@ html, body {
 /* --- Tab Content --- */
 .app-tab-content {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0;
@@ -753,7 +762,8 @@ html, body {
     border: 1px solid var(--border-color);
     border-radius: 10px;
     padding: 8px;
-    max-height: calc(100vh - 390px);
+    /* max-height: calc(100vh - 390px); */
+    /* max-height: calc(100dvh - 390px); */
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: #c5d3e6 transparent;
@@ -1584,11 +1594,15 @@ html, body {
 @media (max-width: 768px) {
     .app-container {
         flex-direction: column;
+        position: relative;
     }
 
+    /* Default mobile: fullscreen panel (tabs 2-5) */
     .map-panel {
         order: 1;
-        height: 45vh;
+        height: 100%;
+        min-height: 0;
+        flex: none;
     }
 
     .side-panel {
@@ -1596,7 +1610,64 @@ html, body {
         width: 100%;
         min-width: unset;
         max-width: unset;
-        height: 55vh;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+    }
+
+    /* Split mode override (tab 1 only) */
+    .side-panel.split-mode {
+        position: relative;
+        inset: auto;
+        z-index: auto;
+        height: auto;
+        flex: 0 0 58%;
+    }
+
+    .side-panel.split-mode ~ .map-panel {
+        flex: 0 0 42%;
+        height: auto;
+    }
+
+    /* Minimized state: panel shrinks, map visible behind */
+    .side-panel.minimized {
+        inset: auto;
+        top: auto;
+        bottom: 0;
+        height: 40%;
+    }
+
+    .side-panel.minimized ~ .map-panel {
+        height: 100%;
+    }
+
+    /* Minimize button */
+    .side-panel:not(.split-mode) .panel-minimize-btn {
+        display: flex;
+        position: absolute;
+        top: 62px;
+        left: 8px;
+        z-index: 12;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 1px solid var(--border-color);
+        background: #fff;
+        box-shadow: var(--shadow-md);
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: background var(--transition), color var(--transition);
+    }
+
+    .side-panel:not(.split-mode) .panel-minimize-btn:hover {
+        background: #f0f4ff;
+        color: var(--primary);
     }
 
     .panel-resize-handle {
@@ -1618,7 +1689,7 @@ html, body {
     }
 
     .dataset-tree {
-        max-height: 220px;
+        /* max-height: 220px; */
     }
 
     .dataset-intro {
@@ -1705,6 +1776,7 @@ html, body {
     .map-panel {
         width: 100%;
         height: 100vh;
+        height: 100dvh;
     }
 }
 
@@ -1939,6 +2011,7 @@ body {
 
 .app-tab-content {
     scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 .pane-content {
@@ -2019,12 +2092,16 @@ body {
 
 .wizard-nav {
     position: sticky;
+    position: -webkit-sticky;
     bottom: 0;
     z-index: 3;
     margin: 15px -16px -20px;
+    margin: 0;
     padding: 12px 16px;
     border-top: 1px solid #dfe7f0;
+    background: #f4f7fb;
     background: rgba(244, 247, 251, 0.93);
+    -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
 }
 
@@ -2151,8 +2228,13 @@ body {
     }
 
     .wizard-nav {
-        margin: 14px -12px -18px;
+        margin: 0;
         padding: 10px 12px;
+    }
+
+    .app-toast {
+        bottom: 75px;
+        min-width: unset;
     }
 
     .wizard-nav .btn {
