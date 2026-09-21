@@ -26,6 +26,7 @@ import queue
 import uuid
 import math
 import random
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -45,6 +46,7 @@ if RASTERIO_PROJ_DATA.exists():
     os.environ["PROJ_DATA"] = str(RASTERIO_PROJ_DATA)
 
 router = APIRouter()
+log = logging.getLogger("landsat")
 
 # === Constants ===
 STAC_BASE_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
@@ -55,6 +57,30 @@ DOWNLOADS_DIR = Path(__file__).parent / "downloads"
 # request plenty of headroom and retry transient connection problems.
 STAC_TIMEOUT = 180
 STAC_RETRIES = 3
+DOWNLOAD_RETRIES = 4
+DOWNLOAD_BACKOFF_BASE = 2  # exponential backoff: 2s, 4s, 8s
+SAS_SIGN_RETRIES = 3
+
+# === Shared HTTP session with connection pooling ===
+_http_session: Optional[requests.Session] = None
+_http_session_lock = threading.Lock()
+
+
+def _get_http_session() -> requests.Session:
+    """Return a module-level requests.Session with connection pooling."""
+    global _http_session
+    if _http_session is None:
+        with _http_session_lock:
+            if _http_session is None:
+                _http_session = requests.Session()
+                adapter = requests.adapters.HTTPAdapter(
+                    pool_connections=10,
+                    pool_maxsize=10,
+                    max_retries=0,  # We handle retries manually for control
+                )
+                _http_session.mount("https://", adapter)
+                _http_session.mount("http://", adapter)
+    return _http_session
 
 # === Processing job queue ===
 # Jobs are processed sequentially by a single background worker thread.
@@ -423,10 +449,11 @@ def stac_request(method: str, url: str, **kwargs) -> requests.Response:
     """
     kwargs.setdefault("timeout", STAC_TIMEOUT)
     kwargs.setdefault("headers", {"Accept": "application/geo+json, application/json"})
+    session = _get_http_session()
     last_exc: Optional[Exception] = None
     for attempt in range(STAC_RETRIES):
         try:
-            response = requests.request(method, url, **kwargs)
+            response = session.request(method, url, **kwargs)
             response.raise_for_status()
             return response
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
@@ -818,17 +845,26 @@ def sign_asset_url(href: str) -> str:
     if "blob.core.windows.net" not in href:
         return href
 
-    try:
-        resp = requests.get(
-            SAS_SIGN_URL,
-            params={"href": href},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data.get("href", href)
-    except Exception as e:
-        raise RuntimeError(f"SAS signing failed: {str(e)}")
+    session = _get_http_session()
+    last_exc: Optional[Exception] = None
+    for attempt in range(SAS_SIGN_RETRIES):
+        try:
+            resp = session.get(
+                SAS_SIGN_URL,
+                params={"href": href},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("href", href)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+            last_exc = exc
+            if attempt < SAS_SIGN_RETRIES - 1:
+                log.warning("SAS signing attempt %d/%d failed: %s — retrying", attempt + 1, SAS_SIGN_RETRIES, exc)
+                time.sleep(1 + attempt)
+        except Exception as exc:
+            raise RuntimeError(f"SAS signing failed: {str(exc)}") from exc
+    raise RuntimeError(f"SAS signing failed after {SAS_SIGN_RETRIES} attempts: {str(last_exc)}")
 
 
 def resolve_asset_hrefs(item: dict, asset_keys: List[str], family: str = "landsat") -> Dict[str, str]:
@@ -874,21 +910,38 @@ def safe_path(base_dir: Path, filename: str) -> Path:
 
 
 def download_file_streaming(url: str, dest_path: Path) -> int:
-    """Download file with streaming, return bytes downloaded."""
-    try:
-        resp = requests.get(url, stream=True, timeout=300)
-        resp.raise_for_status()
-
-        total_bytes = 0
-        with open(dest_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-                    total_bytes += len(chunk)
-
-        return total_bytes
-    except Exception as e:
-        raise RuntimeError(f"Download failed: {str(e)}")
+    """Download file with streaming, retry on transient errors, return bytes downloaded."""
+    session = _get_http_session()
+    last_exc: Optional[Exception] = None
+    for attempt in range(DOWNLOAD_RETRIES):
+        try:
+            resp = session.get(url, stream=True, timeout=300)
+            resp.raise_for_status()
+            total_bytes = 0
+            with open(dest_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        total_bytes += len(chunk)
+            return total_bytes
+        except (requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.ChunkedEncodingError,
+                ConnectionError, OSError) as exc:
+            last_exc = exc
+            if dest_path.exists():
+                dest_path.unlink(missing_ok=True)
+            if attempt < DOWNLOAD_RETRIES - 1:
+                wait = DOWNLOAD_BACKOFF_BASE ** (attempt + 1)
+                log.warning("Download attempt %d/%d failed for %s: %s — retrying in %ds",
+                            attempt + 1, DOWNLOAD_RETRIES, dest_path.name, exc, wait)
+                time.sleep(wait)
+            else:
+                log.error("Download failed after %d attempts for %s: %s",
+                          DOWNLOAD_RETRIES, dest_path.name, exc)
+        except Exception as exc:
+            raise RuntimeError(f"Download failed: {str(exc)}") from exc
+    raise RuntimeError(f"Download failed after {DOWNLOAD_RETRIES} attempts: {str(last_exc)}")
 
 
 # === Request Models ===
@@ -1430,7 +1483,7 @@ async def download_scenes_zip(
 
             try:
                 href = sign_asset_url(href)
-                resp = requests.get(href, timeout=120)
+                resp = _get_http_session().get(href, timeout=120)
                 resp.raise_for_status()
                 safe_name = f"{os.path.basename(item.get('id', scene_id))}_preview.png"
                 zf.writestr(safe_name, resp.content)
